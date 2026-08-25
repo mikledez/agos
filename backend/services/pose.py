@@ -5,14 +5,8 @@ Drop-in replacement for the MediaPipe-based service: exposes the same
 ``main.py`` and ``analysis.py`` are unchanged.
 
 RTMPose outputs 26 HalPE26 keypoints (COCO-compatible for the first 17).
-To keep ``analyze_angles`` untouched, the right-leg keypoints are mapped
-onto the slot indices it expects (the MediaPipe pose convention):
-
-    slot 24 -> right hip    (HalPE26 12)
-    slot 26 -> right knee   (HalPE26 14)
-    slot 28 -> right ankle  (HalPE26 16)
-    slot 30 -> right heel   (HalPE26 25)
-    slot 32 -> right foot   (HalPE26 21, right big toe)
+Leg keypoints are mapped onto the slot indices ``analysis`` expects
+(MediaPipe convention): right leg 24/26/28/30/32, left leg 23/25/27/29/31.
 
 Models are the official OpenMMLab ONNX SDK exports mirrored on Hugging
 Face (Tau-J/RTMPose); fetch them with ``scripts/download_models.sh``.
@@ -34,19 +28,29 @@ MODEL_DIR = Path(
     os.getenv("AGOS_MODEL_DIR",
               Path(__file__).resolve().parent.parent / "models"))
 
-# MediaPipe right-leg landmark slots expected by services/analysis.py
 SLOT_RIGHT_HIP = 24
 SLOT_RIGHT_KNEE = 26
 SLOT_RIGHT_ANKLE = 28
 SLOT_RIGHT_HEEL = 30
 SLOT_RIGHT_FOOT = 32
 
-# HalPE26 indices for the same anatomical points
+SLOT_LEFT_HIP = 23
+SLOT_LEFT_KNEE = 25
+SLOT_LEFT_ANKLE = 27
+SLOT_LEFT_HEEL = 29
+SLOT_LEFT_FOOT = 31
+
 HALPE_RIGHT_HIP = 12
 HALPE_RIGHT_KNEE = 14
 HALPE_RIGHT_ANKLE = 16
 HALPE_RIGHT_HEEL = 25
 HALPE_RIGHT_BIG_TOE = 21
+
+HALPE_LEFT_HIP = 11
+HALPE_LEFT_KNEE = 13
+HALPE_LEFT_ANKLE = 15
+HALPE_LEFT_HEEL = 24
+HALPE_LEFT_BIG_TOE = 20
 
 _SLOT_TO_HALPE = {
     SLOT_RIGHT_HIP: HALPE_RIGHT_HIP,
@@ -54,6 +58,11 @@ _SLOT_TO_HALPE = {
     SLOT_RIGHT_ANKLE: HALPE_RIGHT_ANKLE,
     SLOT_RIGHT_HEEL: HALPE_RIGHT_HEEL,
     SLOT_RIGHT_FOOT: HALPE_RIGHT_BIG_TOE,
+    SLOT_LEFT_HIP: HALPE_LEFT_HIP,
+    SLOT_LEFT_KNEE: HALPE_LEFT_KNEE,
+    SLOT_LEFT_ANKLE: HALPE_LEFT_ANKLE,
+    SLOT_LEFT_HEEL: HALPE_LEFT_HEEL,
+    SLOT_LEFT_FOOT: HALPE_LEFT_BIG_TOE,
 }
 
 # skeleton edges (HalPE26 / COCO ids) used for the overlay
@@ -78,7 +87,7 @@ def get_pose_landmarks(image):
     """Run person detection + RTMPose estimation on one image.
 
     Returns ``(landmarks, pose_landmarks)``. ``landmarks`` is a
-    MediaPipe-style list where the right-leg slots expected by
+    MediaPipe-style list where the leg slots expected by
     ``analysis.analyze_angles`` are filled (see module docstring);
     ``pose_landmarks`` carries the raw keypoints for drawing. Returns
     ``(None, None)`` when no person is detected.
