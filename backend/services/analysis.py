@@ -25,24 +25,24 @@ def calculate_angle(a, b, c):
     a = np.array([a.x, a.y])
     b = np.array([b.x, b.y])
     c = np.array([c.x, c.y])
-
     ba = a - b
     bc = c - b
-
-    cosine = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    n1 = np.linalg.norm(ba)
+    n2 = np.linalg.norm(bc)
+    if n1 < 1e-6 or n2 < 1e-6:
+        return float("nan")
+    cosine = np.dot(ba, bc) / (n1 * n2)
     angle = np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0)))
-
     return angle
 
 
 def _thigh_angle(thigh_np):
     vertical_vector = np.array([0, 1])
-
-    cosine = np.dot(thigh_np, vertical_vector) / (
-        np.linalg.norm(thigh_np) * np.linalg.norm(vertical_vector)
-    )
+    n = np.linalg.norm(thigh_np)
+    if n < 1e-6:
+        return float("nan")
+    cosine = np.dot(thigh_np, vertical_vector) / (n * np.linalg.norm(vertical_vector))
     raw = float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
-
     if thigh_np[0] < 0:
         return -raw
     return raw
@@ -53,35 +53,46 @@ def _vector(a, b):
 
 
 def _angle_between(u, v):
-    cosine = np.dot(u, v) / (np.linalg.norm(u) * np.linalg.norm(v))
+    n1 = np.linalg.norm(u)
+    n2 = np.linalg.norm(v)
+    if n1 < 1e-6 or n2 < 1e-6:
+        return float("nan")
+    cosine = np.dot(u, v) / (n1 * n2)
     return float(np.degrees(np.arccos(np.clip(cosine, -1.0, 1.0))))
 
 
+MIN_VISIBILITY = 0.5
+
+
+def _is_visible(p):
+    if p is None:
+        return False
+    if getattr(p, "visibility", 1.0) < MIN_VISIBILITY:
+        return False
+    if p.x == -1 and p.y == -1:
+        return False
+    return True
+
+
 def _measure_leg(points):
+    if not all(_is_visible(p) for p in points):
+        return {"hip_angle": float("nan"), "knee_angle": float("nan"), "ankle_angle": float("nan")}
     hip, knee, ankle, heel, foot = points
-
-    hip_np = np.array([hip.x, hip.y])
-    knee_np = np.array([knee.x, knee.y])
-    ankle_np = np.array([ankle.x, ankle.y])
-    heel_np = np.array([heel.x, heel.y])
-    foot_np = np.array([foot.x, foot.y])
-
     hip_angle = 180 - _thigh_angle(_vector(hip, knee))
-
     knee_angle = float(calculate_angle(hip, knee, ankle))
-
     shin_vector = _vector(ankle, knee)
     foot_vector = _vector(heel, foot)
-
-    cosine_ankle = np.dot(shin_vector, foot_vector) / (
-        np.linalg.norm(shin_vector) * np.linalg.norm(foot_vector)
-    )
-    ankle_angle = float(np.degrees(np.arccos(np.clip(cosine_ankle, -1.0, 1.0))))
-
+    n1 = np.linalg.norm(shin_vector)
+    n2 = np.linalg.norm(foot_vector)
+    if n1 < 1e-6 or n2 < 1e-6:
+        ankle_angle = float("nan")
+    else:
+        cosine_ankle = np.dot(shin_vector, foot_vector) / (n1 * n2)
+        ankle_angle = float(np.degrees(np.arccos(np.clip(cosine_ankle, -1.0, 1.0))))
     return {
-        "hip_angle": round(hip_angle, 1),
-        "knee_angle": round(knee_angle, 1),
-        "ankle_angle": round(ankle_angle, 1),
+        "hip_angle": round(hip_angle, 1) if hip_angle == hip_angle else float("nan"),
+        "knee_angle": round(knee_angle, 1) if knee_angle == knee_angle else float("nan"),
+        "ankle_angle": round(ankle_angle, 1) if ankle_angle == ankle_angle else float("nan"),
     }
 
 
@@ -92,8 +103,12 @@ def _check_leg(angles, optimal):
         ("knee_angle", "knee", "Knee"),
         ("ankle_angle", "ankle", "Ankle"),
     ):
+        v = angles[angle_key]
+        if v != v:
+            issues.append(f"{label} (low confidence)")
+            continue
         lo, hi = optimal[range_key]
-        if not lo <= angles[angle_key] <= hi:
+        if not lo <= v <= hi:
             issues.append(label)
 
     if issues:
@@ -123,6 +138,9 @@ def _penalty(angles, optimal):
     ):
         lo, hi = optimal[range_key]
         value = angles[angle_key]
+        if value != value:
+            total += 1e6
+            continue
         if value < lo:
             total += (lo - value) ** 2
         elif value > hi:
@@ -162,6 +180,8 @@ def analyze_angles(landmarks, phase="toe_off", direction="ltr"):
                 "stance_points": stance_points,
             }
 
+    if best is None or best["penalty"] >= 1e6:
+        raise ValueError("Low confidence pose: keypoints not visible")
     swing = best["swing"]
     stance = best["stance"]
     swing_points = best["swing_points"]
@@ -183,14 +203,21 @@ def analyze_angles(landmarks, phase="toe_off", direction="ltr"):
     }
 
     if "thigh_thigh" in spec:
-        front_thigh = _vector(swing_points[0], swing_points[1])
-        back_thigh = _vector(stance_points[0], stance_points[1])
-        thigh_thigh_angle = round(_angle_between(front_thigh, back_thigh), 1)
-        result["thigh_thigh_angle"] = thigh_thigh_angle
-
-        lo, hi = spec["thigh_thigh"]
-        if not lo <= thigh_thigh_angle <= hi:
-            parts.append("Thighs outside optimal range")
+        if not all(_is_visible(p) for p in swing_points[:2] + stance_points[:2]):
+            thigh_thigh_angle = float("nan")
+        else:
+            front_thigh = _vector(swing_points[0], swing_points[1])
+            back_thigh = _vector(stance_points[0], stance_points[1])
+            thigh_thigh_angle = _angle_between(front_thigh, back_thigh)
+            thigh_thigh_angle = round(thigh_thigh_angle, 1) if thigh_thigh_angle == thigh_thigh_angle else float("nan")
+        if thigh_thigh_angle != thigh_thigh_angle:
+            result["thigh_thigh_angle"] = None
+            parts.append("Thighs outside optimal range (low confidence)")
+        else:
+            result["thigh_thigh_angle"] = thigh_thigh_angle
+            lo, hi = spec["thigh_thigh"]
+            if not lo <= thigh_thigh_angle <= hi:
+                parts.append("Thighs outside optimal range")
 
     result["feedback"] = "; ".join(parts) if parts else "Good positions"
 

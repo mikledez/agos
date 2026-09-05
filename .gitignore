@@ -1,7 +1,11 @@
 backend/venv/
+backend/.venv/
+.venv/
 backend/models/
 backend/uploads/
 __pycache__/
 *.pyc
 frontend/node_modules/
 frontend/.next/
+Opencode.md
+Angle.md

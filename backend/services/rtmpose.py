@@ -33,7 +33,7 @@ class RTMPose:
         if not model_path.exists():
             raise FileNotFoundError(
                 f"pose model not found at {model_path}; run "
-                "scripts/download_models.sh")
+                "scripts/download_models.py or scripts/download_models.sh")
         self._session = ort.InferenceSession(
             str(model_path), providers=["CPUExecutionProvider"])
 

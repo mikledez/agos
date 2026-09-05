@@ -27,15 +27,29 @@ async def analyze(
         raise HTTPException(status_code=400, detail=f"Unknown direction: {direction}")
 
     contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty file")
     np_arr = np.frombuffer(contents, np.uint8)
     image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid image file")
 
     landmarks, pose_landmarks = get_pose_landmarks(image)
 
     if landmarks is None:
         raise HTTPException(status_code=400, detail="No pose detected")
 
-    result = analyze_angles(landmarks, phase, direction)
+    try:
+        result = analyze_angles(landmarks, phase, direction)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    for k, v in list(result.items()):
+        if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
+            raise HTTPException(status_code=400, detail="Low confidence pose: cannot compute angles")
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                if isinstance(vv, float) and (vv != vv or vv in (float("inf"), float("-inf"))):
+                    raise HTTPException(status_code=400, detail="Low confidence pose: cannot compute angles")
 
     image_with_landmarks = draw_landmarks_on_image(image, pose_landmarks)
     _, buffer = cv2.imencode(".jpg", image_with_landmarks)

@@ -38,28 +38,35 @@ export default function Home() {
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setLoading(true);
     setResult(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("phase", phase);
-    formData.append("direction", direction);
-
-    const res = await fetch("http://127.0.0.1:8000/analyze", {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      setResult({ ...data, error: data.detail || data.error || "Request failed" } as AnalysisResult);
-    } else {
-      setResult(data as AnalysisResult);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("phase", phase);
+      formData.append("direction", direction);
+      const res = await fetch("http://127.0.0.1:8000/analyze", {
+        method: "POST",
+        body: formData,
+      });
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid server response");
+      }
+      if (!res.ok) {
+        const d = data as { detail?: string; error?: string };
+        setResult({ ...(data as object), error: d.detail || d.error || "Request failed" } as AnalysisResult);
+      } else {
+        setResult(data as AnalysisResult);
+      }
+    } catch (err) {
+      setResult({ error: err instanceof Error ? err.message : "Upload failed" } as AnalysisResult);
+    } finally {
+      setLoading(false);
+      e.target.value = "";
     }
-    setLoading(false);
   };
 
   return (
