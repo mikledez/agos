@@ -1,5 +1,4 @@
 "use client";
-import "./globals.css";
 import { useState, ChangeEvent } from "react";
 
 type LegResult = {
@@ -64,9 +63,8 @@ export default function Home() {
   };
 
   return (
-    <div className="container">
+    <main className="main">
       <h1>Sprint Form Analyzer</h1>
-
       <div className="mb-4">
         <label htmlFor="phase">Sprint Phase: </label>
         <select
@@ -133,6 +131,6 @@ export default function Home() {
           <p>Feedback: {result.feedback}</p>
         </div>
       )}
-    </div>
+    </main>
   );
 }
