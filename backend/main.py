@@ -1,60 +1,59 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import os
+from contextlib import asynccontextmanager
+
+import psycopg
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import cv2
-import numpy as np
-import base64
-from services.pose import get_pose_landmarks, draw_landmarks_on_image
-from services.analysis import analyze_angles, RANGES
+from fastapi.responses import JSONResponse
 
-app = FastAPI()
+from api import health, images, sessions, users
+from db import repository as repo
+from db.connection import close_pool
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    close_pool()
+
+app = FastAPI(
+    title="Sprint Form Analyzer API",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+_origins = [
+    origin.strip()
+    for origin in os.getenv("AGOS_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.post("/analyze")
-async def analyze(
-    file: UploadFile = File(...),
-    phase: str = Form("toe_off"),
-    direction: str = Form("ltr"),
-):
-    if phase not in RANGES:
-        raise HTTPException(status_code=400, detail=f"Unknown phase: {phase}")
-    if direction not in ("ltr", "rtl"):
-        raise HTTPException(status_code=400, detail=f"Unknown direction: {direction}")
+@app.exception_handler(repo.ValidationError)
+async def _validation_error(request: Request, exc: repo.ValidationError):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
-    contents = await file.read()
-    if not contents:
-        raise HTTPException(status_code=400, detail="Empty file")
-    np_arr = np.frombuffer(contents, np.uint8)
-    image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if image is None:
-        raise HTTPException(status_code=400, detail="Invalid image file")
+@app.exception_handler(repo.ConflictError)
+async def _conflict_error(request: Request, exc: repo.ConflictError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
-    landmarks, pose_landmarks = get_pose_landmarks(image)
+@app.exception_handler(psycopg.IntegrityError)
+async def _integrity_error(request: Request, exc: psycopg.IntegrityError):
+    return JSONResponse(
+        status_code=409, content={"detail": "constraint violation"}
+    )
 
-    if landmarks is None:
-        raise HTTPException(status_code=400, detail="No pose detected")
+@app.exception_handler(psycopg.OperationalError)
+async def _database_unavailable(request: Request, exc: psycopg.OperationalError):
+    return JSONResponse(
+        status_code=503, content={"detail": "database unavailable"}
+    )
 
-    try:
-        result = analyze_angles(landmarks, phase, direction)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    for k, v in list(result.items()):
-        if isinstance(v, float) and (v != v or v in (float("inf"), float("-inf"))):
-            raise HTTPException(status_code=400, detail="Low confidence pose: cannot compute angles")
-        if isinstance(v, dict):
-            for kk, vv in v.items():
-                if isinstance(vv, float) and (vv != vv or vv in (float("inf"), float("-inf"))):
-                    raise HTTPException(status_code=400, detail="Low confidence pose: cannot compute angles")
-
-    image_with_landmarks = draw_landmarks_on_image(image, pose_landmarks)
-    _, buffer = cv2.imencode(".jpg", image_with_landmarks)
-    encoded_image = base64.b64encode(buffer).decode("utf-8")
-
-    result["annotated_image"] = f"data:image/jpeg;base64,{encoded_image}"
-
-    return result
+app.include_router(health.router)
+app.include_router(users.router)
+app.include_router(sessions.router)
+app.include_router(images.router)

@@ -15,6 +15,7 @@ Face (Tau-J/RTMPose); fetch them with ``scripts/download_models.sh``.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -75,10 +76,12 @@ _SKELETON = [
 MIN_KEYPOINT_CONFIDENCE = 0.5
 
 
+@lru_cache(maxsize=1)
 def _detector() -> PersonDetector:
     return PersonDetector(MODEL_DIR)
 
 
+@lru_cache(maxsize=1)
 def _rtmpose() -> RTMPose:
     return RTMPose(MODEL_DIR)
 
