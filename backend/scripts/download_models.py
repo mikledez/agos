@@ -31,6 +31,9 @@ def main():
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Downloading ONNX models into {MODEL_DIR}")
     for zip_name, out_name in FILES:
+        if (MODEL_DIR / out_name).exists():
+            print(f"Already present: {out_name}")
+            continue
         url = f"{BASE_URL}/{zip_name}"
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = Path(tmp) / zip_name
