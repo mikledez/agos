@@ -1,21 +1,26 @@
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { auth } from "@/auth";
 
-export async function proxy(request: NextRequest) {
-    const path = request.nextUrl.pathname;
-    const token = request.cookies.get(SESSION_COOKIE)?.value;
-    const session = await verifySession(token);
+const protectedPrefixes = ["/analyzer", "/sessions", "/images"];
 
-    if (path.startsWith("/analyzer") && !session) {
-        return NextResponse.redirect(new URL("/login", request.url));
-    }
-    if (path==="/login" && session) {
-        return NextResponse.redirect(new URL("/analyzer", request.url));
-    }
-    return NextResponse.next();
-}
+export const proxy = auth((request) => {
+  const path = request.nextUrl.pathname;
+  const signedIn = Boolean(request.auth?.user);
+
+  if (protectedPrefixes.some((prefix) => path.startsWith(prefix)) && !signedIn) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+  if (path === "/login" && signedIn) {
+    return NextResponse.redirect(new URL("/analyzer", request.url));
+  }
+  return NextResponse.next();
+});
 
 export const config = {
-    matcher: ["/analyzer/:path*", "/login"],
+  matcher: [
+    "/analyzer/:path*",
+    "/sessions/:path*",
+    "/images/:path*",
+    "/login",
+  ],
 };

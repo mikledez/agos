@@ -1,14 +1,16 @@
-"use client";
-import {useRouter} from "next/navigation";
+import { signOut } from "@/auth";
+
+async function logout() {
+  "use server";
+  await signOut({ redirectTo: "/" });
+}
 
 export default function LogoutButton() {
-    const router = useRouter();
-    async function logout() {
-        await fetch("/api/auth/logout", {method:"POST"});
-        router.push("/")
-        router.refresh();
-    }
-    return <button className="btn" onClick={logout}>
+  return (
+    <form action={logout}>
+      <button className="btn" type="submit">
         Logout
-    </button>;
+      </button>
+    </form>
+  );
 }
