@@ -90,3 +90,125 @@ body {
 .results {
   margin: 0 auto;
 }
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-links a {
+  color: white;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-btn {
+  margin-top: 8px;
+}
+
+.dev-login {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.mb-4 {
+  margin-bottom: 8px;
+}
+
+.library-nav {
+  margin: 8px 0 16px;
+}
+
+.inline-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.inline-form input:not([type="hidden"]) {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.btn.danger {
+  background: rgb(188, 21, 69);
+  color: white;
+}
+
+.session-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.session-list a {
+  color: rgb(188, 21, 69);
+  font-weight: 600;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 8px;
+  text-decoration: none;
+  color: inherit;
+  background: #fafafa;
+}
+
+.card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.card small {
+  color: #666;
+}
+
+.detail-image {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 10px;
+}
+
+.angles {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.angles th,
+.angles td {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 8px;
+  text-align: left;
+}
+
+.humanization {
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 24px auto;
+  max-width: 640px;
+  text-align: left;
+}
