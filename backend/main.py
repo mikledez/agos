@@ -23,7 +23,7 @@ app = FastAPI(
 
 _origins = [
     origin.strip()
-    for origin in os.getenv("AGOS_CORS_ORIGINS", "*").split(",")
+    for origin in os.getenv("AGOS_CORS_ORIGINS", "http://localhost:3000").split(",")
     if origin.strip()
 ]
 app.add_middleware(

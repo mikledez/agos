@@ -11,6 +11,8 @@ TEST_DSN = os.getenv("TEST_DATABASE_URL", "postgresql:///agos_test")
 
 os.environ["DATABASE_URL"] = TEST_DSN
 os.environ["AGOS_DATABASE_URL"] = TEST_DSN
+os.environ["AGOS_ALLOW_DEV_USER"] = "1"
+os.environ["AGOS_INTERNAL_SECRET"] = "test-internal-secret-0123456789abcdef"
 
 from db.connection import get_pool
 from db.init import init_db

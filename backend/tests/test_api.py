@@ -1,9 +1,27 @@
+import os
+from datetime import datetime, timedelta, timezone
+
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 
 import main
 from db import repository as repo
-from services import image_service, storage
+from services import humanization, image_service, storage
+
+
+def auth_headers(email: str) -> dict[str, str]:
+    token = jwt.encode(
+        {
+            "sub": email,
+            "email": email,
+            "name": "Test User",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        os.environ["AGOS_INTERNAL_SECRET"],
+        algorithm="HS256",
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 FAKE_RESULT = {
     "phase": "toe_off",
@@ -185,14 +203,51 @@ def test_humanization_crud(client, fake_analysis):
 
 def test_users_cannot_see_each_others_images(client, fake_analysis):
     body = _upload(client).json()
-    other = repo.create_user("other@example.com", name="Other")
-    headers = {"X-User-Id": str(other["id"])}
+    headers = auth_headers("other@example.com")
+    repo.upsert_user("other@example.com", name="Other")
 
     assert client.get(
         f"/images/{body['image_id']}", headers=headers
     ).status_code == 404
     assert client.get(body["original_url"], headers=headers).status_code == 404
     assert client.get("/images", headers=headers).json() == []
+    assert client.get("/me", headers=headers).json()["email"] == "other@example.com"
+
+
+def test_bearer_token_creates_and_reuses_user(client):
+    headers = auth_headers("runner@example.com")
+    first = client.get("/me", headers=headers).json()
+    second = client.get("/me", headers=headers).json()
+    assert first["id"] == second["id"]
+    assert first["email"] == "runner@example.com"
+
+
+def test_rejects_invalid_token_and_missing_auth(client, monkeypatch):
+    bad = {"Authorization": "Bearer not-a-token"}
+    assert client.get("/me", headers=bad).status_code == 401
+
+    monkeypatch.setenv("AGOS_ALLOW_DEV_USER", "0")
+    assert client.get("/me").status_code == 401
+
+
+def test_generate_humanization(client, fake_analysis, monkeypatch):
+    image_id = _upload(client).json()["image_id"]
+
+    def fake_humanize(image):
+        assert image["id"] == image_id
+        return "test-model", "prompt", "Drive the knee forward."
+
+    monkeypatch.setattr(humanization, "humanize_image", fake_humanize)
+
+    response = client.post(f"/images/{image_id}/humanization/generate")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["model"] == "test-model"
+    assert body["humanized_text"] == "Drive the knee forward."
+
+    assert client.get(
+        f"/images/{image_id}/humanization"
+    ).json()["humanized_text"] == "Drive the knee forward."
 
 def test_upload_size_limit(client, monkeypatch):
     monkeypatch.setattr(image_service, "MAX_UPLOAD_BYTES", 4)

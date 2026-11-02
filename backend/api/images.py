@@ -14,7 +14,7 @@ from fastapi import (
 from fastapi.responses import FileResponse
 
 from db import repository as repo
-from services import image_service, storage
+from services import humanization, image_service, storage
 
 from .deps import get_current_user_id
 from .schemas import (
@@ -184,6 +184,26 @@ def get_humanization(
     if humanization is None:
         raise HTTPException(status_code=404, detail="Humanization not found")
     return humanization
+
+@router.post(
+    "/images/{image_id}/humanization/generate",
+    response_model=HumanizationOut,
+)
+def generate_humanization(
+    image_id: int, user_id: int = Depends(get_current_user_id)
+) -> repo.Row:
+    row = _owned_image(image_id, user_id)
+    try:
+        model, prompt, text = humanization.humanize_image(row)
+    except humanization.HumanizationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return repo.upsert_humanization(
+        image_id,
+        user_id,
+        model=model,
+        humanized_text=text,
+        prompt=prompt,
+    )
 
 @router.put(
     "/images/{image_id}/humanization", response_model=HumanizationOut
