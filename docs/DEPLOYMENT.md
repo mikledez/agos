@@ -27,9 +27,13 @@ calls Render server-side.
    - `DATABASE_URL` — the Neon pooled URL.
    - `AGOS_INTERNAL_SECRET` — same 32+ char value as Vercel.
 3. `AGOS_ALLOW_DEV_USER` is `0`; never enable it in staging/production.
-4. The blueprint mounts a 1 GB disk at `/var/data` and sets
-   `AGOS_UPLOAD_DIR=/var/data/uploads`, so JPEGs survive restarts (Render disks
-   require a paid plan; without a disk uploads are ephemeral).
+4. The default blueprint uses Render's **free** plan with
+   `AGOS_UPLOAD_DIR=/tmp/agos-uploads`: no payment method, but image files are
+   lost on redeploy/restart (metadata stays in Neon). For persistent JPEGs,
+   switch to `plan: starter`, uncomment the 1 GB disk block, set
+   `AGOS_UPLOAD_DIR=/var/data/uploads`, and expect the paid instance + disk.
+   The free 512 MB instance can be tight for both ONNX models; if analysis is
+   OOM-killed, use the Starter plan or an object-storage backend.
 5. Build downloads the ONNX models via `scripts/download_models.py` (skips
    files that already exist). Models stay outside git.
 6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.
