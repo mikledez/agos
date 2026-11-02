@@ -3,12 +3,13 @@ import { backendFetch } from "@/lib/backend";
 
 const FORWARDED_RESPONSE_HEADERS = [
   "content-type",
-  "content-length",
   "content-disposition",
   "cache-control",
   "etag",
   "last-modified",
 ];
+
+export const maxDuration = 60;
 
 async function handler(
   request: NextRequest,
@@ -35,7 +36,17 @@ async function handler(
     if (value) responseHeaders.set(name, value);
   }
 
-  return new Response(response.body, {
+  if (response.status === 204 || response.status === 304) {
+    return new Response(null, {
+      status: response.status,
+      headers: responseHeaders,
+    });
+  }
+
+  const body = await response.arrayBuffer();
+  responseHeaders.set("content-length", String(body.byteLength));
+
+  return new Response(body, {
     status: response.status,
     headers: responseHeaders,
   });
