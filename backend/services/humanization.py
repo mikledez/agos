@@ -80,6 +80,10 @@ def _max_new_tokens() -> int:
     return int(os.getenv("AGOS_HUMANIZATION_MAX_TOKENS", "160"))
 
 
+def _groq_max_completion_tokens() -> int:
+    return int(os.getenv("AGOS_GROQ_MAX_COMPLETION_TOKENS", "800"))
+
+
 @lru_cache(maxsize=1)
 def _generator(model_id: str) -> Any:
     try:
@@ -150,7 +154,8 @@ def _post_groq(
                 {"role": "user", "content": build_user_prompt(image)},
             ],
             "temperature": 0,
-            "max_tokens": _max_new_tokens(),
+            "max_completion_tokens": _groq_max_completion_tokens(),
+            "reasoning_effort": "low",
             "stream": False,
         }
     ).encode("utf-8")
@@ -181,13 +186,17 @@ def _post_groq(
         raise HumanizationUnavailable(f"Groq request failed: {exc}") from exc
 
     try:
-        text = str(payload["choices"][0]["message"]["content"]).strip()
+        choice = payload["choices"][0]
+        text = str(choice["message"].get("content") or "").strip()
+        finish_reason = choice.get("finish_reason")
     except (KeyError, IndexError, TypeError) as exc:
         raise HumanizationUnavailable(
             "Groq returned an unexpected response."
         ) from exc
     if not text:
-        raise HumanizationUnavailable("Groq returned an empty response")
+        raise HumanizationUnavailable(
+            f"Groq returned an empty response (finish_reason={finish_reason})"
+        )
     return model_id, text
 
 
