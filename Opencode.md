@@ -45,10 +45,12 @@ Notes:
 - `POST /analyze` always persists (form `file`, `phase`, `direction`, optional `session_id`) and returns analysis fields + `image_id` + `annotated_image` (base64) + `original_url`/`annotated_url`. Uploads limited by `AGOS_MAX_UPLOAD_BYTES` (10 MB) → 413.
 - `backend/scripts/download_models.py`: cross-platform Python alternative to the bash script; `.gitignore` covers model weights and uploads.
 
-## Humanization (local model)
-- `backend/services/humanization.py` builds a metadata-only prompt (`phase`, swing/stance angles, `thigh_thigh`, rule-based feedback, `RANGES`) and runs a local Hugging Face model. No image bytes are sent anywhere.
-- Default model: `HuggingFaceTB/SmolLM2-1.7B-Instruct` (non-gated). Override with `AGOS_HUMANIZATION_MODEL`; tune `AGOS_HUMANIZATION_DEVICE` (default `cpu`) and `AGOS_HUMANIZATION_MAX_TOKENS` (default 160).
-- Heavy dependencies are optional: `pip install -r backend/requirements-llm.txt` (`transformers`, `torch`, `accelerate`). Weights download on first generation. Missing dependencies/model produce a 503 with install instructions.
+## Humanization (Groq + local)
+- `backend/services/humanization.py` builds a metadata-only prompt (`phase`, swing/stance angles, `thigh_thigh`, rule-based feedback, `RANGES`). No image bytes are sent anywhere.
+- `AGOS_HUMANIZATION_PROVIDER=auto` uses Groq when `GROQ_API_KEY` is set, otherwise the local Hugging Face model. Force with `groq` or `local`.
+- Groq defaults: `AGOS_GROQ_MODEL=llama-3.1-8b-instant`, `GROQ_API_KEY` (secret). This is the deployed Render path: no torch/model weights needed.
+- Local default model: `HuggingFaceTB/SmolLM2-1.7B-Instruct` (non-gated). Override with `AGOS_HUMANIZATION_MODEL`; tune `AGOS_HUMANIZATION_DEVICE` (default `cpu`) and `AGOS_HUMANIZATION_MAX_TOKENS` (default 160).
+- Local heavy dependencies are optional: `pip install -r backend/requirements-llm.txt` (`transformers`, `torch`, `accelerate`). Weights download on first generation. Missing configuration/dependencies produce a 503 with instructions.
 - Generation is on-demand: `POST /images/{id}/humanization/generate` stores/replaces the row via `repo.upsert_humanization` and returns it. Manual CRUD remains at `GET/PUT/PATCH/DELETE /images/{id}/humanization`.
 
 ## Frontend
@@ -61,7 +63,7 @@ Notes:
 - Old custom email/password login routes, `lib/session.ts`, and the orphan `/dashboard` route were removed.
 
 ## Database
-- Raw SQL, `backend/db/schema.sql` — `users` (OAuth-compatible), `sessions` (nestable `parent_id`, Drive-like), `images` (`session_id NULL` = root, original filename for display, `uuid` stored path), `image_humanizations` (local model metadata only: phase/angles/feedback vs RANGES).
+- Raw SQL, `backend/db/schema.sql` — `users` (OAuth-compatible), `sessions` (nestable `parent_id`, Drive-like), `images` (`session_id NULL` = root, original filename for display, `uuid` stored path), `image_humanizations` (model metadata only: phase/angles/feedback vs RANGES).
 - `psycopg[binary]` + `psycopg-pool` + `python-dotenv`; `DATABASE_URL` (Neon or localhost); pool in `backend/db/connection.py`.
 - CRUD: `backend/db/repository.py` (users, nested sessions + cycle prevention, images, humanizations). Every user-scoped query filters `user_id`; cross-user session/image refs raise `ValidationError`. `backend/db/init.py` + `scripts/init_db.py` create DB and apply schema. Composite FKs `(session_id,user_id)`/`(image_id,user_id)`, `UNIQUE (id,user_id)`, `updated_at` triggers, unique `(user_id,stored_filename)`. `list_image_files` (recursive subtree) feeds file cleanup. Wired into `/analyze` and all HTTP routes.
 
@@ -88,12 +90,12 @@ Notes:
 - Synthetic pose smoke remains available for the real ONNX pipeline; `python -m compileall -q api db services scripts tests main.py`.
 
 ## Status / Remaining
-- Done: analysis pipeline; DB CRUD; persisted originals/annotated JPEGs; recursive cleanup; sessions/images/humanizations API; Google OAuth via Auth.js; frontend↔backend token bridge; session/gallery + image detail UI; on-demand local humanization; 39 tests.
-- Remaining: configure real Google OAuth credentials; provision the local model on the deployment host (CPU memory/latency, possibly a job queue/streaming); push `rtmpose-test`; deployment envs (Render/Neon/Vercel) and model download step; optional chat extension.
+- Done: analysis pipeline; DB CRUD; persisted originals/annotated JPEGs; recursive cleanup; sessions/images/humanizations API; Google OAuth via Auth.js; frontend↔backend token bridge; session/gallery + image detail UI; on-demand Groq/local coach feedback; Render/Neon/Vercel deployment; 41 tests.
+- Remaining: set `GROQ_API_KEY` on Render; upload a real full-body sprint photo for final smoke test; optional chat extension.
 
 ## Decisions
 - **Auth:** Google OAuth through Auth.js, with a short-lived internal JWT to FastAPI. Keeps the browser off the API origin, avoids trusting user-supplied `X-User-Id`, and leaves room for other providers. Dev fallback is explicit and off by default.
-- **Humanization model:** SmolLM2-1.7B-Instruct default (non-gated, practical CPU size) with `AGOS_HUMANIZATION_MODEL` override for Gemma or larger models. Metadata-only prompts keep images local and generations reproducible (`do_sample=False`).
+- **Humanization model:** Groq (`llama-3.1-8b-instant`) for the free Render deployment; no torch or model weights on the host. Local SmolLM2-1.7B remains available for development via `AGOS_HUMANIZATION_PROVIDER=local`. Metadata-only prompts keep images out of the LLM request.
 - **Direction (ltr/rtl):** explicit selector, not auto-detected. Two leg-swap candidates are still tried automatically.
 - **Storage:** DB holds metadata/paths only; JPEGs stay under `backend/uploads/` (or `AGOS_UPLOAD_DIR`).
 - **DB/hosting:** raw SQL, no ORM/Alembic. Neon for hosted Postgres, localhost fallback. FastAPI on Render (long-running ONNX sessions), Next.js on Vercel.
@@ -104,6 +106,6 @@ Notes:
 - `_SLOT_TO_HALPE` ↔ `PHASES` values must stay in sync (`toe_off`/`mid_stance`/`touchdown`).
 - `AGOS_INTERNAL_SECRET` mismatch → every API request 401. Rotate it on both sides together.
 - Set `AGOS_ALLOW_DEV_USER=0` outside local development.
-- Humanization needs `requirements-llm.txt`; the first request downloads model weights and can be slow/memory-heavy.
-- Models/uploads are gitignored: first-time setup must run `python backend/scripts/download_models.py` and install the optional LLM requirements if humanization is wanted.
+- Humanization on Render uses Groq and needs `GROQ_API_KEY`; local mode instead needs `requirements-llm.txt` and enough RAM for model weights.
+- Models/uploads are gitignored: first-time setup must run `python backend/scripts/download_models.py`; local humanization additionally needs `requirements-llm.txt`, while deployment uses Groq.
 - Backend-relative URLs (`/images/...`) must be prefixed with `/api/backend` on the frontend (`backendAssetUrl`).

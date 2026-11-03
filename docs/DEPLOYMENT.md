@@ -23,9 +23,10 @@ calls Render server-side.
 
 1. Push the repository, then create a Blueprint from `render.yaml` at the repo
    root (or point Render at this file).
-2. Set the two secret env vars in the dashboard:
+2. Set the secret env vars in the dashboard:
    - `DATABASE_URL` — the Neon pooled URL.
    - `AGOS_INTERNAL_SECRET` — same 32+ char value as Vercel.
+   - `GROQ_API_KEY` — from https://console.groq.com/keys.
 3. `AGOS_ALLOW_DEV_USER` is `0`; never enable it in staging/production.
 4. The default blueprint uses Render's **free** plan with
    `AGOS_UPLOAD_DIR=/tmp/agos-uploads`: no payment method, but image files are
@@ -38,10 +39,16 @@ calls Render server-side.
    files that already exist). Models stay outside git.
 6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.
 
-Humanization is **not** installed by the default build. To enable it, install
-`requirements-llm.txt` in the build command and use an instance with enough RAM
-(SmolLM2-1.7B needs roughly 2 GB+). Otherwise `POST /images/{id}/humanization/generate`
-returns a clear 503.
+Coach feedback uses Groq by default in the Render blueprint:
+
+- `AGOS_HUMANIZATION_PROVIDER=groq`
+- `AGOS_GROQ_MODEL=llama-3.1-8b-instant`
+- `GROQ_API_KEY=<your Groq API key>` (set as a secret in Render)
+
+The local Hugging Face model is **not** installed by the default build. Rendering
+SmolLM2-1.7B locally needs roughly 2 GB+ RAM, so use `AGOS_HUMANIZATION_PROVIDER=local`
+only on a larger instance and install `requirements-llm.txt` in the build command.
+If Groq is selected without `GROQ_API_KEY`, generation returns a clear 503.
 
 ## 3. Vercel (Next.js)
 
