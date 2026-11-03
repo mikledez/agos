@@ -473,10 +473,10 @@ def update_image(image_id: int, user_id: int, **changes: Any) -> Row | None:
     if "direction" in changes:
         _validate_direction(changes["direction"])
     for field in ("original_filename", "stored_filename"):
-        if field in changes and (
-            not isinstance(changes[field], str) or not changes[field].strip()
-        ):
-            raise ValidationError(f"{field} is required")
+        if field in changes:
+            if not isinstance(changes[field], str) or not changes[field].strip():
+                raise ValidationError(f"{field} is required")
+            changes[field] = changes[field].strip()
 
     with _cursor() as cur:
         if changes.get("session_id") is not None:

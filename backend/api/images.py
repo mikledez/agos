@@ -133,6 +133,13 @@ def update_image(
         repo.get_session(changes["session_id"], user_id) is None
     ):
         raise HTTPException(status_code=404, detail="Session not found")
+    if "original_filename" in changes:
+        filename = (changes["original_filename"] or "").strip()
+        if not filename:
+            raise HTTPException(
+                status_code=400, detail="original_filename is required"
+            )
+        changes["original_filename"] = filename
 
     row = repo.update_image(image_id, user_id, **changes)
     if row is None:
