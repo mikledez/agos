@@ -42,6 +42,18 @@ SYSTEM_PROMPT = (
     "Do not invent measurements or give medical advice."
 )
 
+CHAT_SYSTEM_PROMPT = (
+    "You are AGOS, a sprint biomechanics coach answering questions about one "
+    "analyzed sprint photo. Use only the supplied measurements and reference "
+    "ranges; never invent numbers. Answer the athlete's question directly in "
+    "2-4 concise sentences of plain text, with no markdown or lists. When "
+    "asked for help or drills, give practical cues or drill suggestions. Do "
+    "not provide a medical diagnosis."
+)
+
+MAX_CHAT_QUESTION_CHARS = 1000
+MAX_CHAT_HISTORY_MESSAGES = 12
+
 
 class HumanizationUnavailable(RuntimeError):
     """Raised when the configured model or provider is not available."""
@@ -144,17 +156,22 @@ class _GroqModelNotFound(Exception):
 
 
 def _post_groq(
-    api_key: str, model_id: str, image: dict[str, Any]
+    api_key: str,
+    model_id: str,
+    messages: list[dict[str, str]],
+    *,
+    max_completion_tokens: int | None = None,
 ) -> tuple[str, str]:
     body = json.dumps(
         {
             "model": model_id,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(image)},
-            ],
+            "messages": messages,
             "temperature": 0,
-            "max_completion_tokens": _groq_max_completion_tokens(),
+            "max_completion_tokens": (
+                max_completion_tokens
+                if max_completion_tokens is not None
+                else _groq_max_completion_tokens()
+            ),
             "reasoning_effort": "low",
             "stream": False,
         }
@@ -200,7 +217,11 @@ def _post_groq(
     return model_id, text
 
 
-def _generate_groq(image: dict[str, Any]) -> tuple[str, str]:
+def _generate_groq_messages(
+    messages: list[dict[str, str]],
+    *,
+    max_completion_tokens: int | None = None,
+) -> tuple[str, str]:
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         raise HumanizationUnavailable(
@@ -210,7 +231,12 @@ def _generate_groq(image: dict[str, Any]) -> tuple[str, str]:
     last_error = ""
     for model_id in _groq_model_candidates():
         try:
-            return _post_groq(api_key, model_id, image)
+            return _post_groq(
+                api_key,
+                model_id,
+                messages,
+                max_completion_tokens=max_completion_tokens,
+            )
         except _GroqModelNotFound as exc:
             last_error = str(exc)
     raise HumanizationUnavailable(
@@ -218,11 +244,18 @@ def _generate_groq(image: dict[str, Any]) -> tuple[str, str]:
     )
 
 
-def _generate_local(image: dict[str, Any], model_id: str) -> str:
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(image)},
-    ]
+def _generate_groq(image: dict[str, Any]) -> tuple[str, str]:
+    return _generate_groq_messages(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_user_prompt(image)},
+        ]
+    )
+
+
+def _generate_local_messages(
+    messages: list[dict[str, str]], model_id: str
+) -> str:
     try:
         generator = _generator(model_id)
         tokenizer = generator.tokenizer
@@ -231,7 +264,11 @@ def _generate_local(image: dict[str, Any], model_id: str) -> str:
                 messages, tokenize=False, add_generation_prompt=True
             )
         else:
-            text_input = f"{SYSTEM_PROMPT}\n\n{build_user_prompt(image)}\n"
+            text_input = "\n\n".join(
+                f"{message['role']}: {message['content']}"
+                for message in messages
+            )
+            text_input += "\nassistant:"
 
         output = generator(
             text_input,
@@ -244,7 +281,7 @@ def _generate_local(image: dict[str, Any], model_id: str) -> str:
         raise
     except Exception as exc:
         raise HumanizationUnavailable(
-            f"local model failed to generate feedback: {exc}"
+            f"local model failed to generate a response: {exc}"
         ) from exc
 
     generated = output[0].get("generated_text", "") if output else ""
@@ -254,6 +291,76 @@ def _generate_local(image: dict[str, Any], model_id: str) -> str:
     if not text:
         raise HumanizationUnavailable("local model returned an empty response")
     return text
+
+
+def _generate_local(image: dict[str, Any], model_id: str) -> str:
+    return _generate_local_messages(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": build_user_prompt(image)},
+        ],
+        model_id,
+    )
+
+
+def _build_chat_messages(
+    image: dict[str, Any],
+    messages: list[dict[str, Any]],
+    latest_question: str,
+    existing_feedback: str | None,
+) -> list[dict[str, str]]:
+    context = {
+        "analysis": build_payload(image),
+        "existing_ai_feedback": existing_feedback,
+    }
+    system_content = (
+        f"{CHAT_SYSTEM_PROMPT}\n\n"
+        "Analysis context (angles in degrees):\n"
+        f"{json.dumps(context, ensure_ascii=True)}"
+    )
+
+    history: list[dict[str, str]] = []
+    for message in list(messages or [])[-MAX_CHAT_HISTORY_MESSAGES:]:
+        role = message.get("role")
+        content = str(message.get("content") or "").strip()
+        if role in {"user", "assistant"} and content:
+            history.append(
+                {"role": role, "content": content[:MAX_CHAT_QUESTION_CHARS]}
+            )
+
+    question = str(latest_question or "").strip()
+    if not question:
+        raise HumanizationUnavailable("A question is required.")
+    question = question[:MAX_CHAT_QUESTION_CHARS]
+
+    return [
+        {"role": "system", "content": system_content},
+        *history,
+        {"role": "user", "content": question},
+    ]
+
+
+def answer_question(
+    image: dict[str, Any],
+    messages: list[dict[str, Any]],
+    latest_question: str,
+    existing_feedback: str | None = None,
+) -> tuple[str, str]:
+    """Return ``(model_id, answer)`` for one chat question about an image."""
+    chat_messages = _build_chat_messages(
+        image, messages, latest_question, existing_feedback
+    )
+
+    if _provider() == "groq":
+        model_id, text = _generate_groq_messages(
+            chat_messages, max_completion_tokens=_groq_max_completion_tokens()
+        )
+        return f"groq:{model_id}", text
+
+    model_id = f"local:{_local_model_id()}"
+    return model_id, _generate_local_messages(
+        chat_messages, _local_model_id()
+    )
 
 
 def humanize_image(image: dict[str, Any]) -> tuple[str, str, str]:
