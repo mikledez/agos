@@ -31,7 +31,7 @@ def _clean(_database):
     with get_pool().connection() as conn:
         conn.execute(
             """
-            TRUNCATE image_humanizations, images, sessions, users
+            TRUNCATE image_chat_messages, image_humanizations, images, sessions, users
             RESTART IDENTITY CASCADE
             """
         )
