@@ -24,6 +24,12 @@ services:
         value: "10485760"
       - key: AGOS_UPLOAD_DIR
         value: /tmp/agos-uploads
+      - key: AGOS_HUMANIZATION_PROVIDER
+        value: groq
+      - key: AGOS_GROQ_MODEL
+        value: llama-3.1-8b-instant
+      - key: GROQ_API_KEY
+        sync: false
     # disk:
     #   name: agos-uploads
     #   mountPath: /var/data

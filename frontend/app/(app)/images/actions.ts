@@ -18,12 +18,15 @@ export async function generateHumanization(formData: FormData): Promise<void> {
   );
 
   if (!response.ok) {
-    const detail = await response.text();
-    redirect(
-      `/images/${imageId}?error=${encodeURIComponent(
-        detail || "Could not generate feedback",
-      )}`,
-    );
+    let detail = "Could not generate feedback";
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      detail = payload.detail || detail;
+    } catch {
+      const text = await response.text().catch(() => "");
+      if (text) detail = text;
+    }
+    redirect(`/images/${imageId}?error=${encodeURIComponent(detail)}`);
   }
 
   revalidatePath(`/images/${imageId}`);

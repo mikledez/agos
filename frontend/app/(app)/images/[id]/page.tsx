@@ -121,7 +121,7 @@ export default async function ImagePage({
             <small>Model: {humanization.model}</small>
           </>
         ) : (
-          <p>No local-model feedback generated yet.</p>
+          <p>No coach feedback generated yet.</p>
         )}
         <form action={generateHumanization} className="inline-form">
           <input type="hidden" name="image_id" value={image.id} />
