@@ -149,6 +149,7 @@ def _generate_groq(image: dict[str, Any]) -> str:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "User-Agent": "agos-sprint-analyzer/1.0",
         },
         method="POST",
     )
