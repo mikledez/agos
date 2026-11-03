@@ -260,6 +260,38 @@ def test_update_image_can_change_analysis_and_move_session():
     moved_to_root = repo.update_image(image["id"], user["id"], session_id=None)
     assert moved_to_root["session_id"] is None
 
+def test_chat_exchange_lists_clears_and_requires_ownership():
+    alice = make_user("alice@example.com")
+    bob = make_user("bob@example.com")
+    image = make_image(alice["id"])
+
+    exchange = repo.create_chat_exchange(
+        image["id"],
+        alice["id"],
+        user_content="What drills help?",
+        assistant_content="Try high knees.",
+        model="groq:test",
+    )
+    assert exchange["user_message"]["role"] == "user"
+    assert exchange["assistant_message"]["model"] == "groq:test"
+
+    messages = repo.list_chat_messages(image["id"], alice["id"])
+    assert [m["role"] for m in messages] == ["user", "assistant"]
+
+    with pytest.raises(repo.ValidationError):
+        repo.list_chat_messages(image["id"], bob["id"])
+    with pytest.raises(repo.ValidationError):
+        repo.create_chat_exchange(
+            image["id"],
+            bob["id"],
+            user_content="Hijack",
+            assistant_content="Nope",
+        )
+
+    assert repo.clear_chat_messages(image["id"], alice["id"]) == 2
+    assert repo.list_chat_messages(image["id"], alice["id"]) == []
+
+
 def test_delete_image_cascades_humanization():
     user = make_user()
     image = make_image(user["id"])

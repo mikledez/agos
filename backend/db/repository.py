@@ -473,10 +473,10 @@ def update_image(image_id: int, user_id: int, **changes: Any) -> Row | None:
     if "direction" in changes:
         _validate_direction(changes["direction"])
     for field in ("original_filename", "stored_filename"):
-        if field in changes and (
-            not isinstance(changes[field], str) or not changes[field].strip()
-        ):
-            raise ValidationError(f"{field} is required")
+        if field in changes:
+            if not isinstance(changes[field], str) or not changes[field].strip():
+                raise ValidationError(f"{field} is required")
+            changes[field] = changes[field].strip()
 
     with _cursor() as cur:
         if changes.get("session_id") is not None:
@@ -535,6 +535,82 @@ def list_image_files(
                 (session_id, user_id, user_id),
             )
         return cur.fetchall()
+
+def list_chat_messages(
+    image_id: int, user_id: int, limit: int = 50
+) -> list[Row]:
+    if limit < 1:
+        raise ValidationError("limit must be >= 1")
+    with _cursor() as cur:
+        _ensure_image(cur, image_id, user_id)
+        cur.execute(
+            """
+            SELECT * FROM (
+                SELECT * FROM image_chat_messages
+                WHERE image_id = %s AND user_id = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+            ) recent
+            ORDER BY created_at, id
+            """,
+            (image_id, user_id, limit),
+        )
+        return cur.fetchall()
+
+
+def create_chat_exchange(
+    image_id: int,
+    user_id: int,
+    *,
+    user_content: str,
+    assistant_content: str,
+    model: str | None = None,
+) -> dict[str, Row]:
+    if not isinstance(user_content, str) or not user_content.strip():
+        raise ValidationError("user_content is required")
+    if not isinstance(assistant_content, str) or not assistant_content.strip():
+        raise ValidationError("assistant_content is required")
+
+    with _cursor() as cur:
+        _ensure_image(cur, image_id, user_id)
+        cur.execute(
+            """
+            INSERT INTO image_chat_messages (image_id, user_id, role, content)
+            VALUES (%s, %s, 'user', %s)
+            RETURNING *
+            """,
+            (image_id, user_id, user_content.strip()),
+        )
+        user_message = cur.fetchone()
+        cur.execute(
+            """
+            INSERT INTO image_chat_messages (
+                image_id, user_id, role, content, model
+            )
+            VALUES (%s, %s, 'assistant', %s, %s)
+            RETURNING *
+            """,
+            (image_id, user_id, assistant_content.strip(), model),
+        )
+        assistant_message = cur.fetchone()
+        return {
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+        }
+
+
+def clear_chat_messages(image_id: int, user_id: int) -> int:
+    with _cursor() as cur:
+        _ensure_image(cur, image_id, user_id)
+        cur.execute(
+            """
+            DELETE FROM image_chat_messages
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+        return cur.rowcount
+
 
 _HUMANIZATION_UPDATABLE = frozenset({"model", "prompt", "humanized_text"})
 

@@ -249,6 +249,97 @@ def test_generate_humanization(client, fake_analysis, monkeypatch):
         f"/images/{image_id}/humanization"
     ).json()["humanized_text"] == "Drive the knee forward."
 
+def test_image_rename_accepts_and_trims_filename(client, fake_analysis):
+    image_id = _upload(client).json()["image_id"]
+
+    response = client.patch(
+        f"/images/{image_id}", json={"original_filename": "  new-run.jpg  "}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["original_filename"] == "new-run.jpg"
+
+    empty = client.patch(
+        f"/images/{image_id}", json={"original_filename": "   "}
+    )
+    assert empty.status_code == 400
+
+
+def test_chat_persists_and_clears(client, fake_analysis, monkeypatch):
+    image_id = _upload(client).json()["image_id"]
+
+    def fake_answer(image, messages, latest_question, existing_feedback=None):
+        assert latest_question == "What drills help?"
+        return "groq:test-model", "Try high-knee drills."
+
+    monkeypatch.setattr(humanization, "answer_question", fake_answer)
+
+    created = client.post(
+        f"/images/{image_id}/messages", json={"content": "What drills help?"}
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    assert body["user_message"]["role"] == "user"
+    assert body["assistant_message"]["role"] == "assistant"
+    assert body["assistant_message"]["model"] == "groq:test-model"
+
+    listing = client.get(f"/images/{image_id}/messages")
+    assert listing.status_code == 200
+    assert [m["content"] for m in listing.json()] == [
+        "What drills help?",
+        "Try high-knee drills.",
+    ]
+
+    assert client.delete(f"/images/{image_id}/messages").status_code == 204
+    assert client.get(f"/images/{image_id}/messages").json() == []
+
+
+def test_chat_model_failure_does_not_store_user_message(
+    client, fake_analysis, monkeypatch
+):
+    image_id = _upload(client).json()["image_id"]
+
+    def failing_answer(*args, **kwargs):
+        raise humanization.HumanizationUnavailable("model offline")
+
+    monkeypatch.setattr(humanization, "answer_question", failing_answer)
+
+    response = client.post(
+        f"/images/{image_id}/messages", json={"content": "Explain this."}
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"] == "model offline"
+    assert client.get(f"/images/{image_id}/messages").json() == []
+
+
+def test_chat_rejects_empty_or_too_long_messages(client, fake_analysis):
+    image_id = _upload(client).json()["image_id"]
+
+    assert client.post(
+        f"/images/{image_id}/messages", json={"content": "   "}
+    ).status_code == 400
+    assert client.post(
+        f"/images/{image_id}/messages", json={"content": "x" * 1001}
+    ).status_code == 422
+
+
+def test_chat_requires_image_ownership(client, fake_analysis):
+    image_id = _upload(client).json()["image_id"]
+    headers = auth_headers("other@example.com")
+    repo.upsert_user("other@example.com", name="Other")
+
+    assert client.get(
+        f"/images/{image_id}/messages", headers=headers
+    ).status_code == 404
+    assert client.post(
+        f"/images/{image_id}/messages",
+        json={"content": "Hello"},
+        headers=headers,
+    ).status_code == 404
+    assert client.delete(
+        f"/images/{image_id}/messages", headers=headers
+    ).status_code == 404
+
+
 def test_upload_size_limit(client, monkeypatch):
     monkeypatch.setattr(image_service, "MAX_UPLOAD_BYTES", 4)
     response = client.post(
