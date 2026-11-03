@@ -123,7 +123,7 @@ def test_groq_humanization_posts_metadata_only(monkeypatch):
     monkeypatch.setenv("AGOS_HUMANIZATION_PROVIDER", "groq")
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setenv("AGOS_GROQ_MODEL", "test-model")
-    monkeypatch.setenv("AGOS_HUMANIZATION_MAX_TOKENS", "42")
+    monkeypatch.setenv("AGOS_GROQ_MAX_COMPLETION_TOKENS", "42")
     monkeypatch.setattr(humanization.urllib.request, "urlopen", fake_urlopen)
 
     model, prompt, text = humanization.humanize_image(_humanization_image())
@@ -134,7 +134,8 @@ def test_groq_humanization_posts_metadata_only(monkeypatch):
     assert captured["authorization"] == "Bearer test-key"
     assert captured["timeout"] == 30
     assert captured["body"]["model"] == "test-model"
-    assert captured["body"]["max_tokens"] == 42
+    assert captured["body"]["max_completion_tokens"] == 42
+    assert captured["body"]["reasoning_effort"] == "low"
     assert captured["body"]["temperature"] == 0
     assert captured["body"]["messages"][0]["role"] == "system"
     assert '"hip": 160.0' in captured["body"]["messages"][1]["content"]

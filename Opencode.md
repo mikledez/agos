@@ -48,7 +48,7 @@ Notes:
 ## Humanization (Groq + local)
 - `backend/services/humanization.py` builds a metadata-only prompt (`phase`, swing/stance angles, `thigh_thigh`, rule-based feedback, `RANGES`). No image bytes are sent anywhere.
 - `AGOS_HUMANIZATION_PROVIDER=auto` uses Groq when `GROQ_API_KEY` is set, otherwise the local Hugging Face model. Force with `groq` or `local`.
-- Groq defaults: `AGOS_GROQ_MODEL=openai/gpt-oss-20b`, fallback `AGOS_GROQ_FALLBACK_MODEL=openai/gpt-oss-120b`, `GROQ_API_KEY` (secret). This is the deployed Render path: no torch/model weights needed.
+- Groq defaults: `AGOS_GROQ_MODEL=openai/gpt-oss-20b`, fallback `AGOS_GROQ_FALLBACK_MODEL=openai/gpt-oss-120b`, `AGOS_GROQ_MAX_COMPLETION_TOKENS=800`, `GROQ_API_KEY` (secret). GPT-OSS is a reasoning model, so requests use `reasoning_effort=low` and `max_completion_tokens`. This is the deployed Render path: no torch/model weights needed.
 - Local default model: `HuggingFaceTB/SmolLM2-1.7B-Instruct` (non-gated). Override with `AGOS_HUMANIZATION_MODEL`; tune `AGOS_HUMANIZATION_DEVICE` (default `cpu`) and `AGOS_HUMANIZATION_MAX_TOKENS` (default 160).
 - Local heavy dependencies are optional: `pip install -r backend/requirements-llm.txt` (`transformers`, `torch`, `accelerate`). Weights download on first generation. Missing configuration/dependencies produce a 503 with instructions.
 - Generation is on-demand: `POST /images/{id}/humanization/generate` stores/replaces the row via `repo.upsert_humanization` and returns it. Manual CRUD remains at `GET/PUT/PATCH/DELETE /images/{id}/humanization`.
