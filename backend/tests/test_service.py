@@ -1,4 +1,6 @@
+import io
 import json
+import urllib.error
 
 import pytest
 
@@ -137,3 +139,44 @@ def test_groq_humanization_posts_metadata_only(monkeypatch):
     assert captured["body"]["messages"][0]["role"] == "system"
     assert '"hip": 160.0' in captured["body"]["messages"][1]["content"]
     assert '"reference_ranges"' in prompt
+
+
+def test_groq_humanization_falls_back_when_model_missing(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps(
+                {"choices": [{"message": {"content": "Fallback feedback."}}]}
+            ).encode()
+
+    def fake_urlopen(request, timeout):
+        model = json.loads(request.data)["model"]
+        calls.append(model)
+        if model == "missing-model":
+            raise urllib.error.HTTPError(
+                request.full_url,
+                404,
+                "Not Found",
+                {},
+                io.BytesIO(b'{"error":{"code":"model_not_found"}}'),
+            )
+        return FakeResponse()
+
+    monkeypatch.setenv("AGOS_HUMANIZATION_PROVIDER", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("AGOS_GROQ_MODEL", "missing-model")
+    monkeypatch.setenv("AGOS_GROQ_FALLBACK_MODEL", "fallback-model")
+    monkeypatch.setattr(humanization.urllib.request, "urlopen", fake_urlopen)
+
+    model, _, text = humanization.humanize_image(_humanization_image())
+
+    assert calls == ["missing-model", "fallback-model"]
+    assert model == "groq:fallback-model"
+    assert text == "Fallback feedback."

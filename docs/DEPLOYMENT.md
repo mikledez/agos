@@ -42,7 +42,8 @@ calls Render server-side.
 Coach feedback uses Groq by default in the Render blueprint:
 
 - `AGOS_HUMANIZATION_PROVIDER=groq`
-- `AGOS_GROQ_MODEL=llama-3.1-8b-instant`
+- `AGOS_GROQ_MODEL=openai/gpt-oss-20b`
+- `AGOS_GROQ_FALLBACK_MODEL=openai/gpt-oss-120b` (used if the primary model is unavailable)
 - `GROQ_API_KEY=<your Groq API key>` (set as a secret in Render)
 
 The local Hugging Face model is **not** installed by the default build. Rendering
