@@ -27,7 +27,9 @@ services:
       - key: AGOS_HUMANIZATION_PROVIDER
         value: groq
       - key: AGOS_GROQ_MODEL
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
+      - key: AGOS_GROQ_FALLBACK_MODEL
+        value: openai/gpt-oss-120b
       - key: GROQ_API_KEY
         sync: false
     # disk:

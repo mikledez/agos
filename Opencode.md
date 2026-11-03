@@ -48,7 +48,7 @@ Notes:
 ## Humanization (Groq + local)
 - `backend/services/humanization.py` builds a metadata-only prompt (`phase`, swing/stance angles, `thigh_thigh`, rule-based feedback, `RANGES`). No image bytes are sent anywhere.
 - `AGOS_HUMANIZATION_PROVIDER=auto` uses Groq when `GROQ_API_KEY` is set, otherwise the local Hugging Face model. Force with `groq` or `local`.
-- Groq defaults: `AGOS_GROQ_MODEL=llama-3.1-8b-instant`, `GROQ_API_KEY` (secret). This is the deployed Render path: no torch/model weights needed.
+- Groq defaults: `AGOS_GROQ_MODEL=openai/gpt-oss-20b`, fallback `AGOS_GROQ_FALLBACK_MODEL=openai/gpt-oss-120b`, `GROQ_API_KEY` (secret). This is the deployed Render path: no torch/model weights needed.
 - Local default model: `HuggingFaceTB/SmolLM2-1.7B-Instruct` (non-gated). Override with `AGOS_HUMANIZATION_MODEL`; tune `AGOS_HUMANIZATION_DEVICE` (default `cpu`) and `AGOS_HUMANIZATION_MAX_TOKENS` (default 160).
 - Local heavy dependencies are optional: `pip install -r backend/requirements-llm.txt` (`transformers`, `torch`, `accelerate`). Weights download on first generation. Missing configuration/dependencies produce a 503 with instructions.
 - Generation is on-demand: `POST /images/{id}/humanization/generate` stores/replaces the row via `repo.upsert_humanization` and returns it. Manual CRUD remains at `GET/PUT/PATCH/DELETE /images/{id}/humanization`.
@@ -90,12 +90,12 @@ Notes:
 - Synthetic pose smoke remains available for the real ONNX pipeline; `python -m compileall -q api db services scripts tests main.py`.
 
 ## Status / Remaining
-- Done: analysis pipeline; DB CRUD; persisted originals/annotated JPEGs; recursive cleanup; sessions/images/humanizations API; Google OAuth via Auth.js; frontend↔backend token bridge; session/gallery + image detail UI; on-demand Groq/local coach feedback; Render/Neon/Vercel deployment; 41 tests.
-- Remaining: set `GROQ_API_KEY` on Render; upload a real full-body sprint photo for final smoke test; optional chat extension.
+- Done: analysis pipeline; DB CRUD; persisted originals/annotated JPEGs; recursive cleanup; sessions/images/humanizations API; Google OAuth via Auth.js; frontend↔backend token bridge; session/gallery + image detail UI; on-demand Groq/local coach feedback; Render/Neon/Vercel deployment; 42 tests.
+- Remaining: verify Groq feedback live; upload a real full-body sprint photo for final smoke test; optional chat extension.
 
 ## Decisions
 - **Auth:** Google OAuth through Auth.js, with a short-lived internal JWT to FastAPI. Keeps the browser off the API origin, avoids trusting user-supplied `X-User-Id`, and leaves room for other providers. Dev fallback is explicit and off by default.
-- **Humanization model:** Groq (`llama-3.1-8b-instant`) for the free Render deployment; no torch or model weights on the host. Local SmolLM2-1.7B remains available for development via `AGOS_HUMANIZATION_PROVIDER=local`. Metadata-only prompts keep images out of the LLM request.
+- **Humanization model:** Groq (`openai/gpt-oss-20b`, fallback `openai/gpt-oss-120b`) for the free Render deployment; no torch or model weights on the host. Local SmolLM2-1.7B remains available for development via `AGOS_HUMANIZATION_PROVIDER=local`. Metadata-only prompts keep images out of the LLM request.
 - **Direction (ltr/rtl):** explicit selector, not auto-detected. Two leg-swap candidates are still tried automatically.
 - **Storage:** DB holds metadata/paths only; JPEGs stay under `backend/uploads/` (or `AGOS_UPLOAD_DIR`).
 - **DB/hosting:** raw SQL, no ORM/Alembic. Neon for hosted Postgres, localhost fallback. FastAPI on Render (long-running ONNX sessions), Next.js on Vercel.

@@ -12,7 +12,8 @@ Providers (``AGOS_HUMANIZATION_PROVIDER``):
 
 Other configuration:
     AGOS_HUMANIZATION_MODEL     local model (default SmolLM2-1.7B-Instruct)
-    AGOS_GROQ_MODEL             Groq model (default llama-3.1-8b-instant)
+    AGOS_GROQ_MODEL             Groq model (default openai/gpt-oss-20b)
+    AGOS_GROQ_FALLBACK_MODEL    used on model_not_found (default gpt-oss-120b)
     AGOS_HUMANIZATION_DEVICE    local device (default cpu)
     AGOS_HUMANIZATION_MAX_TOKENS (default 160)
 """
@@ -29,7 +30,8 @@ from typing import Any
 from .analysis import RANGES
 
 LOCAL_DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
-GROQ_DEFAULT_MODEL = "llama-3.1-8b-instant"
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
+GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 SYSTEM_PROMPT = (
@@ -61,6 +63,17 @@ def _local_model_id() -> str:
 
 def _groq_model_id() -> str:
     return os.getenv("AGOS_GROQ_MODEL", "").strip() or GROQ_DEFAULT_MODEL
+
+
+def _groq_model_candidates() -> list[str]:
+    primary = _groq_model_id()
+    fallback = (
+        os.getenv("AGOS_GROQ_FALLBACK_MODEL", "").strip()
+        or GROQ_FALLBACK_MODEL
+    )
+    if fallback == primary:
+        return [primary]
+    return [primary, fallback]
 
 
 def _max_new_tokens() -> int:
@@ -122,16 +135,16 @@ def build_prompt(image: dict[str, Any]) -> str:
     return f"{SYSTEM_PROMPT}\n\n{build_user_prompt(image)}"
 
 
-def _generate_groq(image: dict[str, Any]) -> str:
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        raise HumanizationUnavailable(
-            "GROQ_API_KEY is not configured for hosted humanization."
-        )
+class _GroqModelNotFound(Exception):
+    pass
 
+
+def _post_groq(
+    api_key: str, model_id: str, image: dict[str, Any]
+) -> tuple[str, str]:
     body = json.dumps(
         {
-            "model": _groq_model_id(),
+            "model": model_id,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": build_user_prompt(image)},
@@ -159,6 +172,8 @@ def _generate_groq(image: dict[str, Any]) -> str:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:300]
+        if exc.code == 404 and "model_not_found" in detail:
+            raise _GroqModelNotFound(detail) from exc
         raise HumanizationUnavailable(
             f"Groq request failed ({exc.code}): {detail}"
         ) from exc
@@ -173,7 +188,25 @@ def _generate_groq(image: dict[str, Any]) -> str:
         ) from exc
     if not text:
         raise HumanizationUnavailable("Groq returned an empty response")
-    return text
+    return model_id, text
+
+
+def _generate_groq(image: dict[str, Any]) -> tuple[str, str]:
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise HumanizationUnavailable(
+            "GROQ_API_KEY is not configured for hosted humanization."
+        )
+
+    last_error = ""
+    for model_id in _groq_model_candidates():
+        try:
+            return _post_groq(api_key, model_id, image)
+        except _GroqModelNotFound as exc:
+            last_error = str(exc)
+    raise HumanizationUnavailable(
+        f"No configured Groq model is available: {last_error}"
+    )
 
 
 def _generate_local(image: dict[str, Any], model_id: str) -> str:
@@ -220,8 +253,8 @@ def humanize_image(image: dict[str, Any]) -> tuple[str, str, str]:
     provider = _provider()
 
     if provider == "groq":
-        model_id = f"groq:{_groq_model_id()}"
-        return model_id, prompt, _generate_groq(image)
+        model_id, text = _generate_groq(image)
+        return f"groq:{model_id}", prompt, text
 
     model_id = f"local:{_local_model_id()}"
     return model_id, prompt, _generate_local(image, _local_model_id())
