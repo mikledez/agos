@@ -71,6 +71,24 @@ CREATE TABLE IF NOT EXISTS image_humanizations (
 CREATE INDEX IF NOT EXISTS idx_humanizations_image ON image_humanizations(image_id);
 CREATE INDEX IF NOT EXISTS idx_humanizations_user ON image_humanizations(user_id);
 
+CREATE TABLE IF NOT EXISTS image_chat_messages (
+    id SERIAL PRIMARY KEY,
+    image_id INT NOT NULL,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+    content TEXT NOT NULL CHECK (content <> ''),
+    model TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chat_image_same_user_fk
+        FOREIGN KEY (image_id, user_id)
+        REFERENCES images(id, user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_image_created
+    ON image_chat_messages(image_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_user
+    ON image_chat_messages(user_id);
+
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
 BEGIN
     NEW.updated_at = now();

@@ -19,6 +19,9 @@ from services import humanization, image_service, storage
 from .deps import get_current_user_id
 from .schemas import (
     AnalyzeResponse,
+    ChatExchangeOut,
+    ChatMessageIn,
+    ChatMessageOut,
     HumanizationIn,
     HumanizationOut,
     HumanizationUpdate,
@@ -130,6 +133,13 @@ def update_image(
         repo.get_session(changes["session_id"], user_id) is None
     ):
         raise HTTPException(status_code=404, detail="Session not found")
+    if "original_filename" in changes:
+        filename = (changes["original_filename"] or "").strip()
+        if not filename:
+            raise HTTPException(
+                status_code=400, detail="original_filename is required"
+            )
+        changes["original_filename"] = filename
 
     row = repo.update_image(image_id, user_id, **changes)
     if row is None:
@@ -142,6 +152,62 @@ def delete_image(
 ) -> None:
     if not image_service.delete_image(user_id, image_id):
         raise HTTPException(status_code=404, detail="Image not found")
+
+@router.get(
+    "/images/{image_id}/messages", response_model=list[ChatMessageOut]
+)
+def list_chat_messages(
+    image_id: int, user_id: int = Depends(get_current_user_id)
+) -> list[dict]:
+    _owned_image(image_id, user_id)
+    return repo.list_chat_messages(image_id, user_id, limit=50)
+
+
+@router.post(
+    "/images/{image_id}/messages", response_model=ChatExchangeOut
+)
+def create_chat_message(
+    image_id: int,
+    payload: ChatMessageIn,
+    user_id: int = Depends(get_current_user_id),
+) -> dict:
+    image = _owned_image(image_id, user_id)
+    question = payload.content.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    history = repo.list_chat_messages(
+        image_id, user_id, limit=humanization.MAX_CHAT_HISTORY_MESSAGES
+    )
+    feedback = repo.get_humanization(image_id, user_id)
+    try:
+        model, answer = humanization.answer_question(
+            image,
+            history,
+            question,
+            existing_feedback=(
+                feedback["humanized_text"] if feedback else None
+            ),
+        )
+    except humanization.HumanizationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return repo.create_chat_exchange(
+        image_id,
+        user_id,
+        user_content=question,
+        assistant_content=answer,
+        model=model,
+    )
+
+
+@router.delete("/images/{image_id}/messages", status_code=204)
+def delete_chat_messages(
+    image_id: int, user_id: int = Depends(get_current_user_id)
+) -> None:
+    _owned_image(image_id, user_id)
+    repo.clear_chat_messages(image_id, user_id)
+
 
 @router.get("/images/{image_id}/file")
 def get_image_file(

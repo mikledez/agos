@@ -17,7 +17,8 @@ calls Render server-side.
    ```bash
    DATABASE_URL='...' python backend/scripts/check_db.py
    ```
-   Expect `users`, `sessions`, `images`, `image_humanizations`.
+   Expect `users`, `sessions`, `images`, `image_humanizations`, and `image_chat_messages`.
+   Re-running `init_db.py` is idempotent, so apply it again after pulling schema changes.
 
 ## 2. Render (FastAPI)
 
@@ -39,7 +40,7 @@ calls Render server-side.
    files that already exist). Models stay outside git.
 6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.
 
-Coach feedback uses Groq by default in the Render blueprint:
+AI feedback and per-image chat use Groq by default in the Render blueprint:
 
 - `AGOS_HUMANIZATION_PROVIDER=groq`
 - `AGOS_GROQ_MODEL=openai/gpt-oss-20b`
@@ -79,8 +80,9 @@ If Groq is selected without `GROQ_API_KEY`, generation returns a clear 503.
 curl https://<service>.onrender.com/health
 ```
 
-Then in the browser: sign in with Google → create a session → upload an image
-→ open the saved analysis → generate feedback (if the LLM is installed).
+Then in the browser: sign in with Google → open `/library` → create a folder →
+upload an image → open the image sheet → generate AI feedback → ask a chat
+question and confirm it persists after refresh.
 
 ## Staging branch flow
 

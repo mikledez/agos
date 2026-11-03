@@ -79,8 +79,24 @@ class ImageDetail(BaseModel):
 
 class ImageUpdate(BaseModel):
     session_id: int | None = None
+    original_filename: str | None = None
     phase: str | None = None
     direction: str | None = None
+
+class ChatMessageIn(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+
+class ChatMessageOut(BaseModel):
+    id: int
+    image_id: int
+    role: str
+    content: str
+    model: str | None = None
+    created_at: datetime
+
+class ChatExchangeOut(BaseModel):
+    user_message: ChatMessageOut
+    assistant_message: ChatMessageOut
 
 class HumanizationIn(BaseModel):
     model: str = Field(min_length=1)
