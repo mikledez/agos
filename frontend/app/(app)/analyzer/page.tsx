@@ -1,4 +1,10 @@
-import AnalyzerClient from "./analyzer-client";
+import { redirect } from "next/navigation";
+
+function parseId(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
 
 export default async function AnalyzerPage({
   searchParams,
@@ -6,8 +12,6 @@ export default async function AnalyzerPage({
   searchParams: Promise<{ session?: string }>;
 }) {
   const { session } = await searchParams;
-  const parsed = session ? Number(session) : null;
-  const sessionId = parsed && Number.isInteger(parsed) ? parsed : null;
-
-  return <AnalyzerClient sessionId={sessionId} />;
+  const folderId = parseId(session);
+  redirect(folderId ? `/library?folder=${folderId}` : "/library");
 }
