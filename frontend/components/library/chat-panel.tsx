@@ -192,9 +192,11 @@ export function ChatPanel({
   return (
     <section className="rounded-lg border border-primary/20 bg-card">
       <div className="space-y-3 p-5">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h3 className="label-caps text-primary">AI feedback</h3>
+            <h3 className="label-caps whitespace-nowrap text-primary">
+              AI feedback
+            </h3>
             {feedback ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Model: {feedback.model}
@@ -209,7 +211,7 @@ export function ChatPanel({
               void handleGenerate();
             }}
             disabled={generating}
-            className="shrink-0"
+            className="h-10 shrink-0 sm:h-8"
           >
             {generating ? (
               <Loader2 className="size-3.5 animate-spin" />
@@ -248,7 +250,7 @@ export function ChatPanel({
               type="button"
               variant="ghost"
               size="sm"
-              className="text-muted-foreground"
+              className="h-10 text-muted-foreground sm:h-8"
               onClick={() => {
                 void handleClear();
               }}
@@ -296,7 +298,7 @@ export function ChatPanel({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-auto px-3 py-1.5 text-xs font-normal"
+                className="h-auto min-h-10 whitespace-normal px-3 py-1.5 text-left text-xs font-normal sm:min-h-0"
                 onClick={() => {
                   void submit(suggestion);
                 }}
@@ -366,6 +368,7 @@ export function ChatPanel({
               <Button
                 type="button"
                 size="icon"
+                className="size-10 sm:size-9"
                 onClick={() => {
                   void submit(input);
                 }}
