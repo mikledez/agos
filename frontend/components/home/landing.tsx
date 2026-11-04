@@ -15,9 +15,9 @@ const steps = [
       "Review the pose overlay and the hip, knee, and ankle angles for each leg.",
   },
   {
-    title: "Work with the coach",
+    title: "Ask AI",
     description:
-      "Get feedback on the frame and ask about cues and drills. Only your measurements are used.",
+      "Get AI feedback on the frame and ask about cues and drills. Only your measurements are used.",
   },
 ];
 

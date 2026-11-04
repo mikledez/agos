@@ -20,7 +20,7 @@ const barlowCondensed = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "ĀGOS — Sprint Form Analysis",
   description:
-    "Analyze sprint photos, compare joint angles to phase-specific ranges, and get coaching feedback.",
+    "Analyze sprint photos, compare joint angles to phase-specific ranges, and get AI feedback.",
 };
 
 export default function RootLayout({
