@@ -14,7 +14,11 @@ function parseId(value: string | undefined): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-async function fetchJson<T>(path: string, fallback: T): Promise<T> {
+async function fetchJson<T>(
+  path: string,
+  fallback: T,
+  { optional = false }: { optional?: boolean } = {},
+): Promise<T> {
   let response: Response;
   try {
     response = await backendFetch(path);
@@ -24,7 +28,10 @@ async function fetchJson<T>(path: string, fallback: T): Promise<T> {
   if (response.status === 401) redirect("/login");
   if (response.status === 404) return fallback;
   if (!response.ok) {
-    throw new Error(`Backend request failed (${response.status})`);
+    const message = `Backend request failed (${response.status}): ${path}`;
+    if (!optional) throw new Error(message);
+    console.error(message);
+    return fallback;
   }
   return (await response.json()) as T;
 }
@@ -80,7 +87,9 @@ export default async function LibraryPage({
       ? fetchJson<ImageDetail | null>(`/images/${imageId}`, null)
       : Promise.resolve(null),
     imageId
-      ? fetchJson<ChatMessage[]>(`/images/${imageId}/messages`, [])
+      ? fetchJson<ChatMessage[]>(`/images/${imageId}/messages`, [], {
+          optional: true,
+        })
       : Promise.resolve([]),
   ]);
 
