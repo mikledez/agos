@@ -130,7 +130,7 @@ export function Dashboard({
       <section>
         <SectionHeading
           title="Recent analyses"
-          description="Open a frame to review angles and feedback."
+          description="Open a frame to review angles and AI feedback."
         />
         {images.length > 0 ? (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

@@ -178,7 +178,7 @@ export function LibraryView({
           description={
             folder
               ? "Add a sprint frame or create a subfolder to keep this training set organized."
-              : "Upload a sprint photo to get pose measurements, coach feedback, and a chat for each frame."
+              : "Upload a sprint photo to get pose measurements, AI feedback, and a chat for each frame."
           }
           className="mt-8 py-16"
           action={
