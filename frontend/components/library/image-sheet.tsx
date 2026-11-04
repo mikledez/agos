@@ -9,7 +9,6 @@ import {
   MoreVertical,
   Pencil,
   RefreshCw,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -68,22 +67,22 @@ type LegMetrics = {
 
 function MetricTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/35 px-2.5 py-2 text-center">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+    <div className="rounded-lg border border-border bg-background px-2.5 py-2">
+      <p className="label-caps text-muted-foreground">
         {label}
       </p>
-      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 font-display text-2xl font-bold leading-none tabular-nums">{value}</p>
     </div>
   );
 }
 
 function LegCard({ metrics }: { metrics: LegMetrics }) {
   return (
-    <Card className="border-border/80 shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{metrics.title}</CardTitle>
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="label-caps text-muted-foreground">{metrics.title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 px-5">
         <div className="grid grid-cols-3 gap-2">
           <MetricTile label="Hip" value={angle(metrics.hip)} />
           <MetricTile label="Knee" value={angle(metrics.knee)} />
@@ -128,14 +127,14 @@ export function ImageSheet({
     setFeedbackError(null);
     const result = await generateFeedback(image.id);
     if (result.error || !result.humanization) {
-      setFeedbackError(result.error ?? "Could not generate AI feedback");
-      toast.error(result.error ?? "Could not generate AI feedback");
+      setFeedbackError(result.error ?? "Could not generate feedback");
+      toast.error(result.error ?? "Could not generate feedback");
       setGenerating(false);
       return;
     }
     setFeedback(result.humanization);
     setGenerating(false);
-    toast.success("AI feedback ready");
+    toast.success("Feedback ready");
     router.refresh();
   }
 
@@ -145,10 +144,10 @@ export function ImageSheet({
         side="right"
         className="w-full overflow-y-auto p-0 sm:max-w-[720px]"
       >
-        <SheetHeader className="sticky top-0 z-10 gap-2 border-b border-border/80 bg-background/95 p-5 pr-14 backdrop-blur">
+        <SheetHeader className="sticky top-0 z-10 gap-2 border-b border-border bg-background/95 p-5 pr-14 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <SheetTitle className="truncate text-lg">
+              <SheetTitle className="display-type truncate pb-0.5 text-2xl">
                 {image.original_filename}
               </SheetTitle>
               <SheetDescription className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -165,7 +164,7 @@ export function ImageSheet({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="mr-6 shrink-0 rounded-full"
+                  className="mr-6 shrink-0"
                   aria-label="Image actions"
                 >
                   <MoreVertical className="size-4" />
@@ -202,7 +201,7 @@ export function ImageSheet({
                 <TabsTrigger value="original">Original</TabsTrigger>
               </TabsList>
             </Tabs>
-            <div className="overflow-hidden rounded-2xl border border-border/80 bg-muted/40">
+            <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
               <img
                 src={src}
                 alt={image.original_filename}
@@ -232,11 +231,11 @@ export function ImageSheet({
             />
           </section>
 
-          <Card className="border-border/80 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Overall</CardTitle>
+          <Card className="gap-3 py-5">
+            <CardHeader className="px-5">
+              <CardTitle className="label-caps text-muted-foreground">Overall</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm leading-6 text-muted-foreground">
+            <CardContent className="space-y-2 px-5 text-sm leading-6 text-muted-foreground">
               {image.thigh_thigh != null ? (
                 <p>
                   <span className="font-medium text-foreground">
@@ -249,12 +248,11 @@ export function ImageSheet({
             </CardContent>
           </Card>
 
-          <Card className="border-primary/15 bg-gradient-to-br from-accent/70 to-card shadow-sm">
-            <CardHeader className="flex-row items-start justify-between gap-3 pb-2">
+          <Card className="gap-3 border-primary/20 py-5">
+            <CardHeader className="flex flex-row items-start justify-between gap-3 px-5">
               <div>
-                <CardTitle className="flex items-center gap-1.5 text-sm">
-                  <Sparkles className="size-4 text-primary" />
-                  AI feedback
+                <CardTitle className="label-caps text-primary">
+                  Coach feedback
                 </CardTitle>
                 {feedback ? (
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -269,19 +267,17 @@ export function ImageSheet({
                   void handleGenerate();
                 }}
                 disabled={generating}
-                className="shrink-0 rounded-full"
+                className="shrink-0"
               >
                 {generating ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : feedback ? (
                   <RefreshCw className="size-3.5" />
-                ) : (
-                  <Sparkles className="size-3.5" />
-                )}
-                {feedback ? "Regenerate" : "Generate AI feedback"}
+                ) : null}
+                {feedback ? "Regenerate" : "Generate feedback"}
               </Button>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 px-5">
               {feedbackError ? (
                 <Alert variant="destructive">
                   <AlertCircle className="size-4" />
@@ -293,7 +289,7 @@ export function ImageSheet({
                 <p className="text-sm leading-6">{feedback.humanized_text}</p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No AI feedback yet. Generate a concise coaching summary from
+                  No feedback yet. Generate a concise coaching summary from
                   these measurements.
                 </p>
               )}

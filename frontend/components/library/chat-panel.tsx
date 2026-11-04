@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
-  Bot,
+  MessageSquare,
   Loader2,
   RefreshCw,
   Send,
-  Sparkles,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -40,6 +39,14 @@ function optimisticMessage(imageId: number, content: string): ChatMessage {
   };
 }
 
+function CoachMark() {
+  return (
+    <span aria-hidden="true" className="font-display text-base font-extrabold italic">
+      Ā
+    </span>
+  );
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
@@ -59,15 +66,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : "bg-accent text-primary",
           )}
         >
-          {isUser ? <UserRound className="size-4" /> : <Bot className="size-4" />}
+          {isUser ? <UserRound className="size-4" /> : <CoachMark />}
         </AvatarFallback>
       </Avatar>
       <div
         className={cn(
-          "max-w-[82%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-6",
+          "max-w-[82%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-sm leading-6",
           isUser
             ? "rounded-tr-sm bg-primary text-primary-foreground"
-            : "rounded-tl-sm border border-border/80 bg-card text-card-foreground",
+            : "rounded-tl-sm border border-border bg-card text-card-foreground",
         )}
       >
         {message.content}
@@ -86,7 +93,11 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+    // Scroll the chat only. scrollIntoView would also move the image panel.
+    const viewport = bottomRef.current?.closest(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    viewport?.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
   }, [messages, pending]);
 
   async function submit(content: string) {
@@ -154,10 +165,7 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-            <Sparkles className="size-4 text-primary" />
-            Ask the AI coach
-          </h3>
+          <h3 className="label-caps text-primary">Ask the coach</h3>
           <p className="text-xs text-muted-foreground">
             Follow up about cues, drills, or this phase.
           </p>
@@ -181,12 +189,12 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-muted/30">
+      <div className="overflow-hidden rounded-lg border border-border bg-muted/30">
         <ScrollArea className="h-72 px-3 py-3 sm:h-80">
           {messages.length === 0 && !pending ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-2 text-center">
-              <span className="flex size-10 items-center justify-center rounded-full bg-accent text-primary">
-                <Bot className="size-5" />
+              <span className="flex size-10 items-center justify-center rounded-md bg-accent text-primary">
+                <MessageSquare className="size-5" />
               </span>
               <div>
                 <p className="text-sm font-medium">Ask about this analysis</p>
@@ -201,7 +209,7 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-auto rounded-full bg-white px-3 py-1.5 text-xs font-normal"
+                    className="h-auto bg-card px-3 py-1.5 text-xs font-normal"
                     onClick={() => {
                       void submit(suggestion);
                     }}
@@ -220,14 +228,14 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
                 <div className="flex items-start gap-2.5">
                   <Avatar className="size-8 shrink-0">
                     <AvatarFallback className="bg-accent text-primary">
-                      <Bot className="size-4" />
+                      <CoachMark />
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm border border-border/80 bg-card px-3.5 py-3">
+                  <div className="flex items-center gap-1 rounded-lg rounded-tl-sm border border-border bg-card px-3.5 py-3">
                     <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.3s]" />
                     <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70 [animation-delay:-0.15s]" />
                     <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70" />
-                    <span className="sr-only">AI is typing</span>
+                    <span className="sr-only">Coach is typing</span>
                   </div>
                 </div>
               ) : null}
@@ -248,7 +256,7 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="mt-2 bg-white"
+                className="mt-2"
                 onClick={retry}
                 disabled={pending}
               >
@@ -275,7 +283,7 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
           maxLength={MAX_CHARS}
           disabled={pending || clearing}
           aria-label="Chat message"
-          className="min-h-16 resize-none bg-white"
+          className="min-h-16 resize-none bg-card"
         />
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-muted-foreground">
@@ -295,7 +303,6 @@ export function ChatPanel({ imageId, initialMessages }: ChatPanelProps) {
             <Button
               type="button"
               size="icon"
-              className="rounded-full"
               onClick={() => {
                 void submit(input);
               }}

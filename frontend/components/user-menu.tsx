@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, UserRound } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -34,7 +34,7 @@ export function UserMenu({ name, email, image }: UserMenuProps) {
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="h-9 gap-2 rounded-full px-1.5 sm:pr-3"
+          className="h-10 gap-2 rounded-full px-1 sm:pr-3"
           aria-label="Open account menu"
         >
           <Avatar className="size-7">
@@ -48,13 +48,12 @@ export function UserMenu({ name, email, image }: UserMenuProps) {
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="font-normal">
-          <span className="flex items-center gap-2 text-sm font-medium">
-            <UserRound className="size-4 text-muted-foreground" />
+          <span className="block truncate text-sm font-medium text-foreground">
             {name || "Athlete"}
           </span>
-          <span className="mt-1 block truncate text-xs text-muted-foreground">
+          <span className="block truncate text-xs text-muted-foreground">
             {email}
           </span>
         </DropdownMenuLabel>
