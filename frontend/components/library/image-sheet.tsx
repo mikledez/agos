@@ -3,21 +3,10 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react";
-import {
-  AlertCircle,
-  Loader2,
-  MoreVertical,
-  Pencil,
-  RefreshCw,
-  Trash2,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { generateFeedback } from "@/lib/actions/library";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { DIRECTION_LABEL, PHASE_LABEL } from "@/lib/constants";
 import { angle } from "@/lib/format";
 import { backendAssetUrl } from "@/lib/backend";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +33,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChatPanel } from "@/components/library/chat-panel";
 import type {
   ChatMessage,
-  Humanization,
   ImageDetail,
   SprintImage,
 } from "@/lib/types";
@@ -103,13 +91,7 @@ export function ImageSheet({
   onRename,
   onDelete,
 }: ImageSheetProps) {
-  const router = useRouter();
   const { image } = detail;
-  const [feedback, setFeedback] = useState<Humanization | null>(
-    detail.humanization,
-  );
-  const [generating, setGenerating] = useState(false);
-  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [view, setView] = useState<"annotated" | "original">(
     image.annotated_url ? "annotated" : "original",
   );
@@ -120,23 +102,6 @@ export function ImageSheet({
         ? image.annotated_url ?? image.original_url
         : image.original_url,
     ) ?? "";
-
-  async function handleGenerate() {
-    if (generating) return;
-    setGenerating(true);
-    setFeedbackError(null);
-    const result = await generateFeedback(image.id);
-    if (result.error || !result.humanization) {
-      setFeedbackError(result.error ?? "Could not generate feedback");
-      toast.error(result.error ?? "Could not generate feedback");
-      setGenerating(false);
-      return;
-    }
-    setFeedback(result.humanization);
-    setGenerating(false);
-    toast.success("Feedback ready");
-    router.refresh();
-  }
 
   return (
     <Sheet open onOpenChange={(next) => !next && onClose()}>
@@ -248,58 +213,11 @@ export function ImageSheet({
             </CardContent>
           </Card>
 
-          <Card className="gap-3 border-primary/20 py-5">
-            <CardHeader className="flex flex-row items-start justify-between gap-3 px-5">
-              <div>
-                <CardTitle className="label-caps text-primary">
-                  Coach feedback
-                </CardTitle>
-                {feedback ? (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Model: {feedback.model}
-                  </p>
-                ) : null}
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  void handleGenerate();
-                }}
-                disabled={generating}
-                className="shrink-0"
-              >
-                {generating ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : feedback ? (
-                  <RefreshCw className="size-3.5" />
-                ) : null}
-                {feedback ? "Regenerate" : "Generate feedback"}
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3 px-5">
-              {feedbackError ? (
-                <Alert variant="destructive">
-                  <AlertCircle className="size-4" />
-                  <AlertTitle>Could not generate feedback</AlertTitle>
-                  <AlertDescription>{feedbackError}</AlertDescription>
-                </Alert>
-              ) : null}
-              {feedback ? (
-                <p className="text-sm leading-6">{feedback.humanized_text}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No feedback yet. Generate a concise coaching summary from
-                  these measurements.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
           <ChatPanel
             key={image.id}
             imageId={image.id}
             initialMessages={messages}
+            initialFeedback={detail.humanization}
           />
         </div>
       </SheetContent>

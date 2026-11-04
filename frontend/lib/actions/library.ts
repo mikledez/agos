@@ -119,7 +119,7 @@ export async function generateFeedback(
   );
   if (!response.ok) {
     return {
-      error: await errorMessage(response, "Could not generate feedback"),
+      error: await errorMessage(response, "Could not generate AI feedback"),
     };
   }
   revalidateAll();
