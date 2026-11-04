@@ -79,7 +79,7 @@ export function ImageCard({
               <Button
                 variant="secondary"
                 size="icon-sm"
-                className="bg-card/90 backdrop-blur hover:bg-card"
+                className="size-10 bg-card/90 backdrop-blur hover:bg-card sm:size-8"
                 aria-label={`Actions for ${image.original_filename}`}
               >
                 <MoreVertical className="size-4" />

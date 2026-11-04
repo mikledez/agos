@@ -334,6 +334,7 @@ export function LibraryView({
           key={imageDetail.image.id}
           detail={imageDetail}
           messages={messages}
+          backLabel={folder?.name ?? "Library"}
           onClose={closeImage}
           onRename={(image) =>
             setRenameTarget({
