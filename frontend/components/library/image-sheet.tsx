@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useState } from "react";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { DIRECTION_LABEL, PHASE_LABEL } from "@/lib/constants";
 import { angle } from "@/lib/format";
 import { backendAssetUrl } from "@/lib/backend";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
@@ -40,6 +41,7 @@ import type {
 type ImageSheetProps = {
   detail: ImageDetail;
   messages: ChatMessage[];
+  backLabel: string;
   onClose: () => void;
   onRename: (image: SprintImage) => void;
   onDelete: (image: SprintImage) => void;
@@ -87,11 +89,13 @@ function LegCard({ metrics }: { metrics: LegMetrics }) {
 export function ImageSheet({
   detail,
   messages,
+  backLabel,
   onClose,
   onRename,
   onDelete,
 }: ImageSheetProps) {
   const { image } = detail;
+  const [open, setOpen] = useState(true);
   const [view, setView] = useState<"annotated" | "original">(
     image.annotated_url ? "annotated" : "original",
   );
@@ -104,53 +108,70 @@ export function ImageSheet({
     ) ?? "";
 
   return (
-    <Sheet open onOpenChange={(next) => !next && onClose()}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (next) return;
+        setOpen(false);
+        onClose();
+      }}
+    >
       <SheetContent
         side="right"
-        className="w-full overflow-y-auto p-0 sm:max-w-[720px]"
+        showCloseButton={false}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          (event.currentTarget as HTMLElement).focus();
+        }}
+        className="h-dvh w-full gap-0 overflow-y-auto p-0 outline-none sm:max-w-[720px]"
       >
-        <SheetHeader className="sticky top-0 z-10 gap-2 border-b border-border bg-background/95 p-5 pr-14 backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <SheetTitle className="display-type truncate pb-0.5 text-2xl">
-                {image.original_filename}
-              </SheetTitle>
-              <SheetDescription className="mt-1 flex flex-wrap items-center gap-1.5">
-                <Badge variant="secondary">
-                  {PHASE_LABEL[image.phase] ?? image.phase}
-                </Badge>
-                <Badge variant="outline">
-                  {DIRECTION_LABEL[image.direction] ?? image.direction}
-                </Badge>
-              </SheetDescription>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="mr-6 shrink-0"
-                  aria-label="Image actions"
-                >
-                  <MoreVertical className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onSelect={() => onRename(image)}>
-                  <Pencil className="size-4" />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => onDelete(image)}
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+        <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border bg-background/95 px-2 backdrop-blur sm:px-3">
+          <SheetClose asChild>
+            <Button variant="ghost" className="h-10 min-w-0 px-2">
+              <ArrowLeft className="size-5" />
+              <span className="sr-only">Back to </span>
+              <span className="truncate">{backLabel}</span>
+            </Button>
+          </SheetClose>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                aria-label="Image actions"
+              >
+                <MoreVertical className="size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onSelect={() => onRename(image)}>
+                <Pencil className="size-4" />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={() => onDelete(image)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <SheetHeader className="gap-2 px-5 pb-0 pt-5">
+          <SheetTitle className="display-type pb-0.5 text-2xl [overflow-wrap:anywhere]">
+            {image.original_filename}
+          </SheetTitle>
+          <SheetDescription className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary">
+              {PHASE_LABEL[image.phase] ?? image.phase}
+            </Badge>
+            <Badge variant="outline">
+              {DIRECTION_LABEL[image.direction] ?? image.direction}
+            </Badge>
+          </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6 p-5">

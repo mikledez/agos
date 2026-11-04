@@ -153,7 +153,7 @@ export function UploadDialog({
       open={open}
       onOpenChange={(next) => !uploading && onOpenChange(next)}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -235,7 +235,7 @@ export function UploadDialog({
                   <UploadCloud className="size-5" />
                 </span>
                 <span className="text-sm font-medium">
-                  Drop an image here or click to browse
+                  Choose a photo or drop one here
                 </span>
                 <span className="text-xs text-muted-foreground">
                   JPEG, PNG, WebP, or HEIC. Large photos are resized

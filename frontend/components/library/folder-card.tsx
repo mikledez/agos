@@ -54,7 +54,7 @@ export function FolderCard({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="text-muted-foreground"
+                className="size-10 text-muted-foreground sm:size-8"
                 aria-label={`Actions for ${folder.name}`}
               >
                 <MoreVertical className="size-4" />
