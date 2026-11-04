@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { AppShell } from "@/components/app-shell";
 import { Dashboard } from "@/components/home/dashboard";
 import { Landing } from "@/components/home/landing";
 import { backendFetch } from "@/lib/backend";
@@ -21,7 +22,11 @@ export default async function HomePage() {
   const session = await auth();
 
   if (!session?.user?.email) {
-    return <Landing />;
+    return (
+      <AppShell>
+        <Landing />
+      </AppShell>
+    );
   }
 
   const [folders, images] = await Promise.all([
@@ -45,13 +50,15 @@ export default async function HomePage() {
     "athlete";
 
   return (
-    <Dashboard
-      firstName={firstName}
-      folders={recentFolders}
-      images={images}
-      folderCount={folders.length}
-      imageCount={images.length}
-      latestActivity={activityDates[0] ?? null}
-    />
+    <AppShell>
+      <Dashboard
+        firstName={firstName}
+        folders={recentFolders}
+        images={images}
+        folderCount={folders.length}
+        imageCount={images.length}
+        latestActivity={activityDates[0] ?? null}
+      />
+    </AppShell>
   );
 }

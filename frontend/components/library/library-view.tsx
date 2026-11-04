@@ -4,13 +4,14 @@ import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   FolderPlus,
   ImagePlus,
   Library,
   Plus,
   UploadCloud,
 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import {
   Breadcrumb,
@@ -105,121 +106,104 @@ export function LibraryView({
   const isEmpty = folders.length === 0 && images.length === 0;
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 pb-32 pt-8 sm:px-6 lg:px-8 lg:pt-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                {folder ? (
-                  <BreadcrumbLink asChild>
-                    <Link href="/library">Library</Link>
-                  </BreadcrumbLink>
-                ) : (
-                  <BreadcrumbPage>Library</BreadcrumbPage>
-                )}
-              </BreadcrumbItem>
-              {breadcrumb.map((item, index) => {
-                const isLast =
-                  index === breadcrumb.length - 1 && folder?.id === item.id;
-                return (
-                  <Fragment key={item.id}>
-                    <BreadcrumbSeparator />
+    <div className="mx-auto max-w-screen-2xl px-4 pb-32 pt-8 sm:px-6 lg:px-8 lg:pt-10">
+      <PageHeader
+        eyebrow={
+          folder ? (
+            <div className="normal-case tracking-normal">
+                <Breadcrumb>
+                  <BreadcrumbList>
                     <BreadcrumbItem>
-                      {isLast ? (
-                        <BreadcrumbPage>{item.name}</BreadcrumbPage>
-                      ) : (
+                      {folder ? (
                         <BreadcrumbLink asChild>
-                          <Link href={`/library?folder=${item.id}`}>
-                            {item.name}
-                          </Link>
+                          <Link href="/library">Library</Link>
                         </BreadcrumbLink>
+                      ) : (
+                        <BreadcrumbPage>Library</BreadcrumbPage>
                       )}
                     </BreadcrumbItem>
-                  </Fragment>
-                );
-              })}
-            </BreadcrumbList>
-          </Breadcrumb>
-          <h1 className="mt-3 truncate text-3xl font-semibold tracking-tight sm:text-4xl">
-            {folder?.name ?? "Library"}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {isEmpty
-              ? "Nothing here yet."
-              : `${folders.length} folder${folders.length === 1 ? "" : "s"} · ${images.length} image${images.length === 1 ? "" : "s"}`}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full bg-white"
-            onClick={() => setNewFolderOpen(true)}
-          >
-            <FolderPlus className="size-4" />
-            New folder
-          </Button>
-          <Button
-            type="button"
-            className="rounded-full"
-            onClick={() => setUploadOpen(true)}
-          >
-            <UploadCloud className="size-4" />
-            Upload
-          </Button>
-        </div>
-      </div>
+                    {breadcrumb.map((item, index) => {
+                      const isLast =
+                        index === breadcrumb.length - 1 && folder?.id === item.id;
+                      return (
+                        <Fragment key={item.id}>
+                          <BreadcrumbSeparator />
+                          <BreadcrumbItem>
+                            {isLast ? (
+                              <BreadcrumbPage>{item.name}</BreadcrumbPage>
+                            ) : (
+                              <BreadcrumbLink asChild>
+                                <Link href={`/library?folder=${item.id}`}>
+                                  {item.name}
+                                </Link>
+                              </BreadcrumbLink>
+                            )}
+                          </BreadcrumbItem>
+                        </Fragment>
+                      );
+                    })}
+                  </BreadcrumbList>
+                </Breadcrumb>
+            </div>
+          ) : undefined
+        }
+        title={folder?.name ?? "Library"}
+        description={
+          isEmpty
+            ? "Nothing here yet."
+            : `${folders.length} folder${folders.length === 1 ? "" : "s"} · ${images.length} image${images.length === 1 ? "" : "s"}`
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setNewFolderOpen(true)}
+            >
+              <FolderPlus className="size-4" />
+              New folder
+            </Button>
+            <Button type="button" onClick={() => setUploadOpen(true)}>
+              <UploadCloud className="size-4" />
+              Upload
+            </Button>
+          </>
+        }
+      />
 
       {isEmpty ? (
-        <section className="mt-10">
-          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-white/70 px-6 py-16 text-center">
-            <span className="flex size-14 items-center justify-center rounded-2xl bg-accent text-primary">
-              {folder ? (
-                <Library className="size-7" aria-hidden="true" />
-              ) : (
-                <FolderPlus className="size-7" aria-hidden="true" />
-              )}
-            </span>
-            <h2 className="mt-4 text-xl font-semibold">
-              {folder ? "This folder is empty" : "Your library is empty"}
-            </h2>
-            <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              {folder
-                ? "Add a sprint frame or create a subfolder to keep this training set organized."
-                : "Upload a sprint photo to get pose measurements, AI feedback, and a persistent coach chat."}
-            </p>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                className="rounded-full"
-                onClick={() => setUploadOpen(true)}
-              >
+        <EmptyState
+          icon={folder ? Library : FolderPlus}
+          title={folder ? "This folder is empty" : "Your library is empty"}
+          description={
+            folder
+              ? "Add a sprint frame or create a subfolder to keep this training set organized."
+              : "Upload a sprint photo to get pose measurements, coach feedback, and a chat for each frame."
+          }
+          className="mt-8 py-16"
+          action={
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button type="button" onClick={() => setUploadOpen(true)}>
                 <ImagePlus className="size-4" />
                 Upload an image
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full bg-white"
                 onClick={() => setNewFolderOpen(true)}
               >
                 <FolderPlus className="size-4" />
                 New folder
               </Button>
             </div>
-          </div>
-        </section>
+          }
+        />
       ) : (
         <div className="mt-8 space-y-8">
           {folders.length > 0 ? (
             <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Folders
-                </h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              <h2 className="label-caps mb-3 text-muted-foreground">Folders</h2>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
                 {folders.map((item) => (
                   <FolderCard
                     key={item.id}
@@ -247,12 +231,8 @@ export function LibraryView({
 
           {images.length > 0 ? (
             <section>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Images
-                </h2>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              <h2 className="label-caps mb-3 text-muted-foreground">Images</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
                 {images.map((image) => (
                   <ImageCard
                     key={image.id}
@@ -289,7 +269,7 @@ export function LibraryView({
             <Button
               type="button"
               size="icon-lg"
-              className="size-14 rounded-full shadow-lg shadow-primary/30 transition hover:scale-105 hover:shadow-xl"
+              className="size-14 rounded-lg shadow-md"
               aria-label="Add to library"
             >
               <Plus className="size-6" />
@@ -371,11 +351,6 @@ export function LibraryView({
           }
         />
       ) : null}
-
-      <div className="mt-12 flex items-center justify-center gap-1 text-xs text-muted-foreground">
-        <ArrowRight className="size-3" aria-hidden="true" />
-        Use the breadcrumb to move up a folder level.
-      </div>
-    </main>
+    </div>
   );
 }

@@ -35,14 +35,14 @@ export function ImageCard({
   const hasMenu = Boolean(onRename || onDelete);
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
+    <div className="group relative overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/30">
       <Link href={href} className="block">
         <div className="relative aspect-square overflow-hidden bg-muted">
           {src ? (
             <img
               src={src}
               alt={image.original_filename}
-              className="size-full object-cover transition duration-300 group-hover:scale-[1.02]"
+              className="size-full object-cover"
               loading="lazy"
             />
           ) : (
@@ -56,14 +56,14 @@ export function ImageCard({
             </Badge>
             <Badge
               variant="secondary"
-              className="border-0 bg-white/85 text-foreground backdrop-blur"
+              className="border-0 bg-card/90 text-foreground backdrop-blur"
             >
               {DIRECTION_LABEL[image.direction] ?? image.direction}
             </Badge>
           </div>
         </div>
         <div className="p-3">
-          <p className="truncate text-sm font-semibold">
+          <p className="truncate text-sm font-semibold group-hover:text-primary">
             {image.original_filename}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -79,7 +79,7 @@ export function ImageCard({
               <Button
                 variant="secondary"
                 size="icon-sm"
-                className="rounded-full bg-white/85 shadow-sm backdrop-blur hover:bg-white"
+                className="bg-card/90 backdrop-blur hover:bg-card"
                 aria-label={`Actions for ${image.original_filename}`}
               >
                 <MoreVertical className="size-4" />

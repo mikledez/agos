@@ -191,7 +191,7 @@ export function UploadDialog({
                     type="button"
                     size="icon-sm"
                     variant="secondary"
-                    className="absolute right-2 top-2 rounded-full bg-white/90"
+                    className="absolute right-2 top-2 bg-card/90"
                     onClick={() => {
                       setFile(null);
                       setPreview(null);
@@ -231,7 +231,7 @@ export function UploadDialog({
                     : "border-border bg-muted/40 hover:border-primary/40 hover:bg-accent/60",
                 )}
               >
-                <span className="flex size-11 items-center justify-center rounded-full bg-white text-primary shadow-sm">
+                <span className="flex size-11 items-center justify-center rounded-full bg-accent text-primary">
                   <UploadCloud className="size-5" />
                 </span>
                 <span className="text-sm font-medium">
@@ -297,7 +297,7 @@ export function UploadDialog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mt-2 bg-white"
+                  className="mt-2"
                   onClick={() => formRef.current?.requestSubmit()}
                   disabled={uploading || !file}
                 >
