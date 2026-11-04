@@ -29,29 +29,32 @@ export function FolderCard({
   const hasMenu = Boolean(onRename || onDelete);
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md">
-      <Link href={href} className="flex aspect-square flex-col">
-        <div className="flex flex-1 items-center justify-center bg-gradient-to-br from-accent via-secondary/70 to-card">
-          <span className="flex size-16 items-center justify-center rounded-2xl bg-white/75 text-primary shadow-sm ring-1 ring-primary/10 transition group-hover:scale-105">
-            <Folder className="size-8" aria-hidden="true" />
+    <div className="group relative rounded-lg border border-border bg-card transition-colors hover:border-primary/30">
+      <Link
+        href={href}
+        className="flex items-center gap-3 rounded-lg p-4 pr-12 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
+          <Folder className="size-5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold group-hover:text-primary">
+            {folder.name}
           </span>
-        </div>
-        <div className="p-3">
-          <p className="truncate text-sm font-semibold">{folder.name}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
             Updated {formatDate(folder.updated_at)}
-          </p>
-        </div>
+          </span>
+        </span>
       </Link>
 
       {hasMenu ? (
-        <div className="absolute right-2 top-2">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="secondary"
+                variant="ghost"
                 size="icon-sm"
-                className="rounded-full bg-white/85 shadow-sm backdrop-blur hover:bg-white"
+                className="text-muted-foreground"
                 aria-label={`Actions for ${folder.name}`}
               >
                 <MoreVertical className="size-4" />

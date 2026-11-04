@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { AppHeader } from "@/components/app-header";
+import { Barlow, Barlow_Condensed } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// latin-ext carries the macron in the wordmark.
+const barlow = Barlow({
+  variable: "--font-barlow",
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const barlowCondensed = Barlow_Condensed({
+  variable: "--font-barlow-condensed",
+  subsets: ["latin", "latin-ext"],
+  weight: ["600", "700", "800"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
-  title: "AGOS — Sprint Form Analysis",
+  title: "ĀGOS — Sprint Form Analysis",
   description:
-    "Analyze sprint photos, compare joint angles to phase-specific ranges, and get AI coaching.",
+    "Analyze sprint photos, compare joint angles to phase-specific ranges, and get coaching feedback.",
 };
 
 export default function RootLayout({
@@ -28,11 +31,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}
     >
-      <body className="flex min-h-screen flex-col">
-        <AppHeader />
-        <div className="flex-1">{children}</div>
+      <body className="flex min-h-svh flex-col">
+        {children}
         <Toaster richColors position="top-right" />
       </body>
     </html>
