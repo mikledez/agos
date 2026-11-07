@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import math
 import os
 from typing import Any
@@ -14,7 +15,11 @@ from . import storage
 from .analysis import analyze_angles
 from .pose import draw_landmarks_on_image, get_pose_landmarks
 
+logger = logging.getLogger(__name__)
+
 MAX_UPLOAD_BYTES = int(os.getenv("AGOS_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
+IMAGE_RETENTION_HOURS = int(os.getenv("AGOS_IMAGE_RETENTION_HOURS", 48))
+ANNOTATED_JPEG_QUALITY = 85
 
 def _assert_finite(result: dict[str, Any]) -> None:
     message = "Low confidence pose: cannot compute angles"
@@ -27,9 +32,6 @@ def _assert_finite(result: dict[str, Any]) -> None:
     thigh = result.get("thigh_thigh_angle")
     if isinstance(thigh, float) and not math.isfinite(thigh):
         raise ValueError(message)
-
-def _file_paths(row: dict[str, Any]) -> list[str | None]:
-    return [row.get("stored_filename"), row.get("annotated_path")]
 
 def analyze_and_store(
     user_id: int,
@@ -65,58 +67,48 @@ def analyze_and_store(
     _assert_finite(result)
 
     annotated = draw_landmarks_on_image(image, pose_landmarks)
-    ok, encoded = cv2.imencode(".jpg", annotated)
+    ok, encoded = cv2.imencode(
+        ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, ANNOTATED_JPEG_QUALITY]
+    )
     if not ok:
         raise ValueError("Could not encode annotated image")
     annotated_bytes = encoded.tobytes()
 
-    stored_filename: str | None = None
-    annotated_path: str | None = None
+    stored_filename, annotated_path = storage.new_image_names(
+        user_id, original_filename
+    )
+    row = repo.create_image_from_analysis(
+        user_id,
+        original_filename=original_filename,
+        stored_filename=stored_filename,
+        phase=phase,
+        direction=direction,
+        result=result,
+        session_id=session_id,
+        annotated_path=annotated_path,
+    )
     try:
-        stored_filename = storage.save_original(
-            user_id, contents, original_filename
-        )
-        annotated_path = storage.save_annotated(
-            user_id, annotated_bytes, stored_filename
-        )
-        row = repo.create_image_from_analysis(
-            user_id,
-            original_filename=original_filename,
-            stored_filename=stored_filename,
-            phase=phase,
-            direction=direction,
-            result=result,
-            session_id=session_id,
-            annotated_path=annotated_path,
+        repo.save_image_files(
+            row["id"], user_id, original=contents, annotated=annotated_bytes
         )
     except Exception:
-        storage.delete_paths([stored_filename, annotated_path])
+        repo.delete_image(row["id"], user_id)
         raise
 
     annotated_base64 = base64.b64encode(annotated_bytes).decode("utf-8")
     return row, result, annotated_base64
 
 def delete_image(user_id: int, image_id: int) -> bool:
-    row = repo.get_image(image_id, user_id)
-    if row is None:
-        return False
-    if not repo.delete_image(image_id, user_id):
-        return False
-    storage.delete_paths(_file_paths(row))
-    return True
+    return repo.delete_image(image_id, user_id)
 
 def delete_session(user_id: int, session_id: int) -> bool:
-    if repo.get_session(session_id, user_id) is None:
-        return False
-    files = repo.list_image_files(user_id, session_id=session_id)
-    if not repo.delete_session(session_id, user_id):
-        return False
-    storage.delete_paths(path for row in files for path in _file_paths(row))
-    return True
+    return repo.delete_session(session_id, user_id)
 
 def delete_user(user_id: int) -> bool:
-    files = repo.list_image_files(user_id)
-    if not repo.delete_user(user_id):
-        return False
-    storage.delete_paths(path for row in files for path in _file_paths(row))
-    return True
+    return repo.delete_user(user_id)
+
+def purge_inactive_images() -> int:
+    deleted = repo.delete_inactive_images(IMAGE_RETENTION_HOURS)
+    if deleted:
+        logger.info("deleted %d inactive images", deleted)
+    return deleted

@@ -499,42 +499,81 @@ def delete_image(image_id: int, user_id: int) -> bool:
         )
         return cur.fetchone() is not None
 
-def list_image_files(
-    user_id: int, *, session_id: int | None | object = _UNSET
-) -> list[Row]:
+def save_image_files(
+    image_id: int, user_id: int, *, original: bytes, annotated: bytes | None
+) -> None:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO image_files (image_id, user_id, original, annotated)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (image_id, user_id, original, annotated),
+        )
+
+def _get_image_file(image_id: int, user_id: int, column: str) -> bytes | None:
+    with _cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT {column} AS contents FROM image_files
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+        row = cur.fetchone()
+    if row is None or row["contents"] is None:
+        return None
+    return bytes(row["contents"])
+
+def get_original_file(image_id: int, user_id: int) -> bytes | None:
+    return _get_image_file(image_id, user_id, "original")
+
+def get_annotated_file(image_id: int, user_id: int) -> bytes | None:
+    return _get_image_file(image_id, user_id, "annotated")
+
+def touch_image_activity(image_id: int, user_id: int) -> None:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            UPDATE image_files SET last_activity_at = now()
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+
+_NO_STORED_FILES = """
+    NOT EXISTS (SELECT 1 FROM image_files AS f WHERE f.image_id = i.id)
+    AND i.created_at < now() - interval '1 hour'
+"""
+
+def count_images_without_files() -> int:
+    with _cursor() as cur:
+        cur.execute(
+            f"SELECT count(*) AS total FROM images AS i WHERE {_NO_STORED_FILES}"
+        )
+        return cur.fetchone()["total"]
+
+def delete_images_without_files() -> int:
+    """One-off cleanup; the age check protects uploads that are still saving."""
 
     with _cursor() as cur:
-        if session_id is _UNSET:
-            cur.execute(
-                """
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s
-                """,
-                (user_id,),
-            )
-        elif session_id is None:
-            cur.execute(
-                """
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s AND session_id IS NULL
-                """,
-                (user_id,),
-            )
-        else:
-            cur.execute(
-                """
-                WITH RECURSIVE subtree AS (
-                    SELECT id FROM sessions WHERE id = %s AND user_id = %s
-                    UNION ALL
-                    SELECT s.id FROM sessions s
-                    JOIN subtree t ON s.parent_id = t.id
-                )
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s AND session_id IN (SELECT id FROM subtree)
-                """,
-                (session_id, user_id, user_id),
-            )
-        return cur.fetchall()
+        cur.execute(f"DELETE FROM images AS i WHERE {_NO_STORED_FILES}")
+        return cur.rowcount
+
+def delete_inactive_images(retention_hours: int) -> int:
+    """Delete images idle past the limit; older rows without stored bytes stay."""
+
+    with _cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM images AS i
+            USING image_files AS f
+            WHERE f.image_id = i.id
+              AND f.last_activity_at < now() - make_interval(hours => %s)
+            """,
+            (retention_hours,),
+        )
+        return cur.rowcount
 
 def list_chat_messages(
     image_id: int, user_id: int, limit: int = 50
