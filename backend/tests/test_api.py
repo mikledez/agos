@@ -1,7 +1,9 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import cv2
 import jwt
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -42,8 +44,7 @@ FAKE_RESULT = {
 }
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(storage, "UPLOAD_DIR", tmp_path)
+def client():
     return TestClient(main.app)
 
 @pytest.fixture
@@ -52,8 +53,7 @@ def fake_analysis(monkeypatch):
         user_id, *, contents, original_filename, phase, direction,
         session_id=None,
     ):
-        stored = storage.save_original(user_id, contents, original_filename)
-        annotated = storage.save_annotated(user_id, b"annotated", stored)
+        stored, annotated = storage.new_image_names(user_id, original_filename)
         row = repo.create_image_from_analysis(
             user_id,
             original_filename=original_filename,
@@ -63,6 +63,9 @@ def fake_analysis(monkeypatch):
             result=FAKE_RESULT,
             session_id=session_id,
             annotated_path=annotated,
+        )
+        repo.save_image_files(
+            row["id"], user_id, original=contents, annotated=b"annotated"
         )
         return row, FAKE_RESULT, "QUJD"
 
@@ -146,21 +149,65 @@ def test_delete_session_removes_nested_images_and_files(client, fake_analysis):
     body = _upload(client, session_id=child["id"]).json()
 
     image = repo.get_image(body["image_id"], repo.get_user_by_email("dev@local")["id"])
-    assert storage.resolve(image["stored_filename"]).exists()
+    assert repo.get_original_file(image["id"], image["user_id"]) is not None
 
     assert client.delete(f"/sessions/{root['id']}").status_code == 204
     assert repo.get_image(body["image_id"], image["user_id"]) is None
-    assert not storage.resolve(image["stored_filename"]).exists()
-    assert not storage.resolve(image["annotated_path"]).exists()
+    assert repo.get_original_file(image["id"], image["user_id"]) is None
+    assert repo.get_annotated_file(image["id"], image["user_id"]) is None
 
 def test_delete_image_removes_files(client, fake_analysis):
     body = _upload(client).json()
     user_id = repo.get_user_by_email("dev@local")["id"]
-    image = repo.get_image(body["image_id"], user_id)
 
     assert client.delete(f"/images/{body['image_id']}").status_code == 204
-    assert not storage.resolve(image["stored_filename"]).exists()
+    assert repo.get_original_file(body["image_id"], user_id) is None
     assert client.get(f"/images/{body['image_id']}").status_code == 404
+
+def _analysis_upload(client):
+    ok, encoded = cv2.imencode(".jpg", np.zeros((8, 8, 3), np.uint8))
+    assert ok
+    return client.post(
+        "/analyze",
+        files={"file": ("run.jpg", encoded.tobytes(), "image/jpeg")},
+        data={"phase": "toe_off", "direction": "ltr"},
+    ), encoded.tobytes()
+
+@pytest.fixture
+def fake_pose(monkeypatch):
+    monkeypatch.setattr(
+        image_service, "get_pose_landmarks", lambda _image: ([object()], object())
+    )
+    monkeypatch.setattr(
+        image_service, "analyze_angles", lambda *_args: FAKE_RESULT
+    )
+    monkeypatch.setattr(
+        image_service, "draw_landmarks_on_image", lambda image, _landmarks: image
+    )
+
+def test_analyze_stores_both_images_in_the_database(client, fake_pose):
+    response, contents = _analysis_upload(client)
+    assert response.status_code == 200, response.text
+    body = response.json()
+
+    original = client.get(body["original_url"])
+    assert original.content == contents
+    assert original.headers["content-type"] == "image/jpeg"
+    annotated = client.get(body["annotated_url"])
+    assert annotated.status_code == 200
+    assert annotated.content.startswith(b"\xff\xd8")
+
+def test_analyze_removes_the_record_when_saving_images_fails(fake_pose, monkeypatch):
+    client = TestClient(main.app, raise_server_exceptions=False)
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("database full")
+
+    monkeypatch.setattr(repo, "save_image_files", fail)
+    response, _contents = _analysis_upload(client)
+
+    assert response.status_code == 500
+    assert client.get("/images").json() == []
 
 def test_image_update_moves_between_sessions(client, fake_analysis):
     session = client.post("/sessions", json={"name": "S"}).json()

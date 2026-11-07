@@ -499,42 +499,37 @@ def delete_image(image_id: int, user_id: int) -> bool:
         )
         return cur.fetchone() is not None
 
-def list_image_files(
-    user_id: int, *, session_id: int | None | object = _UNSET
-) -> list[Row]:
-
+def save_image_files(
+    image_id: int, user_id: int, *, original: bytes, annotated: bytes | None
+) -> None:
     with _cursor() as cur:
-        if session_id is _UNSET:
-            cur.execute(
-                """
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s
-                """,
-                (user_id,),
-            )
-        elif session_id is None:
-            cur.execute(
-                """
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s AND session_id IS NULL
-                """,
-                (user_id,),
-            )
-        else:
-            cur.execute(
-                """
-                WITH RECURSIVE subtree AS (
-                    SELECT id FROM sessions WHERE id = %s AND user_id = %s
-                    UNION ALL
-                    SELECT s.id FROM sessions s
-                    JOIN subtree t ON s.parent_id = t.id
-                )
-                SELECT stored_filename, annotated_path FROM images
-                WHERE user_id = %s AND session_id IN (SELECT id FROM subtree)
-                """,
-                (session_id, user_id, user_id),
-            )
-        return cur.fetchall()
+        cur.execute(
+            """
+            INSERT INTO image_files (image_id, user_id, original, annotated)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (image_id, user_id, original, annotated),
+        )
+
+def _get_image_file(image_id: int, user_id: int, column: str) -> bytes | None:
+    with _cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT {column} AS contents FROM image_files
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+        row = cur.fetchone()
+    if row is None or row["contents"] is None:
+        return None
+    return bytes(row["contents"])
+
+def get_original_file(image_id: int, user_id: int) -> bytes | None:
+    return _get_image_file(image_id, user_id, "original")
+
+def get_annotated_file(image_id: int, user_id: int) -> bytes | None:
+    return _get_image_file(image_id, user_id, "annotated")
 
 def list_chat_messages(
     image_id: int, user_id: int, limit: int = 50

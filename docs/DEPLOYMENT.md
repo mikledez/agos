@@ -17,7 +17,7 @@ calls Render server-side.
    ```bash
    DATABASE_URL='...' python backend/scripts/check_db.py
    ```
-   Expect `users`, `sessions`, `images`, `image_humanizations`, and `image_chat_messages`.
+   Expect `users`, `sessions`, `images`, `image_files`, `image_humanizations`, and `image_chat_messages`.
    Re-running `init_db.py` is idempotent, so apply it again after pulling schema changes.
 
 ## 2. Render (FastAPI)
@@ -29,13 +29,11 @@ calls Render server-side.
    - `AGOS_INTERNAL_SECRET` — same 32+ char value as Vercel.
    - `GROQ_API_KEY` — from https://console.groq.com/keys.
 3. `AGOS_ALLOW_DEV_USER` is `0`; never enable it in staging/production.
-4. The default blueprint uses Render's **free** plan with
-   `AGOS_UPLOAD_DIR=/tmp/agos-uploads`: no payment method, but image files are
-   lost on redeploy/restart (metadata stays in Neon). For persistent JPEGs,
-   switch to `plan: starter`, uncomment the 1 GB disk block, set
-   `AGOS_UPLOAD_DIR=/var/data/uploads`, and expect the paid instance + disk.
+4. The default blueprint uses Render's **free** plan. Uploaded images are stored
+   in Neon (`image_files`), so they survive restarts and redeploys.
+   **Apply the schema to Neon (step 1) before deploying this change.**
    The free 512 MB instance can be tight for both ONNX models; if analysis is
-   OOM-killed, use the Starter plan or an object-storage backend.
+   OOM-killed, use the Starter plan.
 5. Build downloads the ONNX models via `scripts/download_models.py` (skips
    files that already exist). Models stay outside git.
 6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.

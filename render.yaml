@@ -1,7 +1,4 @@
-# Free staging deployment: no persistent disk, so uploaded JPEGs are lost on
-# redeploy/restart (metadata still lives in Neon). For persistent uploads,
-# switch to plan: starter, add the disk block below and set
-# AGOS_UPLOAD_DIR=/var/data/uploads.
+# Free staging deployment: uploaded images are stored in Neon.
 services:
   - type: web
     name: agos-api
@@ -22,8 +19,6 @@ services:
         value: "0"
       - key: AGOS_MAX_UPLOAD_BYTES
         value: "10485760"
-      - key: AGOS_UPLOAD_DIR
-        value: /tmp/agos-uploads
       - key: AGOS_HUMANIZATION_PROVIDER
         value: groq
       - key: AGOS_GROQ_MODEL
@@ -32,7 +27,3 @@ services:
         value: openai/gpt-oss-120b
       - key: GROQ_API_KEY
         sync: false
-    # disk:
-    #   name: agos-uploads
-    #   mountPath: /var/data
-    #   sizeGB: 1

@@ -11,7 +11,7 @@ from fastapi import (
     Query,
     UploadFile,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 
 from db import repository as repo
 from services import humanization, image_service, storage
@@ -38,6 +38,15 @@ def _owned_image(image_id: int, user_id: int) -> repo.Row:
     if row is None:
         raise HTTPException(status_code=404, detail="Image not found")
     return row
+
+def _image_file_response(contents: bytes | None, *, media_type: str, missing_detail: str) -> Response:
+    if contents is None:
+        raise HTTPException(status_code=404, detail=missing_detail)
+    return Response(
+        contents,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(
@@ -212,32 +221,26 @@ def delete_chat_messages(
 @router.get("/images/{image_id}/file")
 def get_image_file(
     image_id: int, user_id: int = Depends(get_current_user_id)
-) -> FileResponse:
+) -> Response:
     row = _owned_image(image_id, user_id)
-    try:
-        path = storage.resolve(row["stored_filename"])
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Image not found") from exc
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Image file missing")
-    return FileResponse(
-        path, media_type=storage.media_type_for(row["stored_filename"])
+    return _image_file_response(
+        repo.get_original_file(image_id, user_id),
+        media_type=storage.media_type_for(row["stored_filename"]),
+        missing_detail="Image file missing",
     )
 
 @router.get("/images/{image_id}/annotated")
 def get_annotated_image(
     image_id: int, user_id: int = Depends(get_current_user_id)
-) -> FileResponse:
+) -> Response:
     row = _owned_image(image_id, user_id)
     if not row.get("annotated_path"):
         raise HTTPException(status_code=404, detail="Annotated image not found")
-    try:
-        path = storage.resolve(row["annotated_path"])
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Image not found") from exc
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail="Annotated image missing")
-    return FileResponse(path, media_type="image/jpeg")
+    return _image_file_response(
+        repo.get_annotated_file(image_id, user_id),
+        media_type="image/jpeg",
+        missing_detail="Annotated image missing",
+    )
 
 @router.get(
     "/images/{image_id}/humanization", response_model=HumanizationOut
