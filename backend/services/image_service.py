@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import math
 import os
 from typing import Any
@@ -14,7 +15,10 @@ from . import storage
 from .analysis import analyze_angles
 from .pose import draw_landmarks_on_image, get_pose_landmarks
 
+logger = logging.getLogger(__name__)
+
 MAX_UPLOAD_BYTES = int(os.getenv("AGOS_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
+IMAGE_RETENTION_HOURS = int(os.getenv("AGOS_IMAGE_RETENTION_HOURS", 48))
 ANNOTATED_JPEG_QUALITY = 85
 
 def _assert_finite(result: dict[str, Any]) -> None:
@@ -102,3 +106,9 @@ def delete_session(user_id: int, session_id: int) -> bool:
 
 def delete_user(user_id: int) -> bool:
     return repo.delete_user(user_id)
+
+def purge_inactive_images() -> int:
+    deleted = repo.delete_inactive_images(IMAGE_RETENTION_HOURS)
+    if deleted:
+        logger.info("deleted %d inactive images", deleted)
+    return deleted

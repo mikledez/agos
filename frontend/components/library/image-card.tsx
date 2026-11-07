@@ -36,7 +36,7 @@ export function ImageCard({
 
   return (
     <div className="group relative overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary/30">
-      <Link href={href} className="block">
+      <Link href={href} prefetch={false} className="block">
         <div className="relative aspect-square overflow-hidden bg-muted">
           {src ? (
             <img
@@ -87,7 +87,7 @@ export function ImageCard({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem asChild>
-                <Link href={href}>
+                <Link href={href} prefetch={false}>
                   <ExternalLink className="size-4" />
                   Open
                 </Link>

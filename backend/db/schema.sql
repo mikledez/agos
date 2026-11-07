@@ -59,10 +59,14 @@ CREATE TABLE IF NOT EXISTS image_files (
     user_id INT NOT NULL,
     original BYTEA NOT NULL,
     annotated BYTEA,
+    last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT image_files_image_same_user_fk
         FOREIGN KEY (image_id, user_id)
         REFERENCES images(id, user_id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_image_files_last_activity
+    ON image_files(last_activity_at);
 
 CREATE TABLE IF NOT EXISTS image_humanizations (
     id SERIAL PRIMARY KEY,

@@ -243,6 +243,10 @@ export function UploadDialog({
                 </span>
               </button>
             )}
+            <p className="text-xs text-muted-foreground">
+              Images are deleted, along with their analysis and chat, after 48
+              hours without activity.
+            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

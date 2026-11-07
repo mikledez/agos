@@ -39,6 +39,11 @@ def _owned_image(image_id: int, user_id: int) -> repo.Row:
         raise HTTPException(status_code=404, detail="Image not found")
     return row
 
+def _active_image(image_id: int, user_id: int) -> repo.Row:
+    row = _owned_image(image_id, user_id)
+    repo.touch_image_activity(image_id, user_id)
+    return row
+
 def _image_file_response(contents: bytes | None, *, media_type: str, missing_detail: str) -> Response:
     if contents is None:
         raise HTTPException(status_code=404, detail=missing_detail)
@@ -125,7 +130,7 @@ def list_images(
 def get_image(
     image_id: int, user_id: int = Depends(get_current_user_id)
 ) -> dict:
-    row = _owned_image(image_id, user_id)
+    row = _active_image(image_id, user_id)
     humanization = repo.get_humanization(image_id, user_id)
     return {"image": image_payload(row), "humanization": humanization}
 
@@ -153,6 +158,7 @@ def update_image(
     row = repo.update_image(image_id, user_id, **changes)
     if row is None:
         raise HTTPException(status_code=404, detail="Image not found")
+    repo.touch_image_activity(image_id, user_id)
     return image_payload(row)
 
 @router.delete("/images/{image_id}", status_code=204)
@@ -180,7 +186,7 @@ def create_chat_message(
     payload: ChatMessageIn,
     user_id: int = Depends(get_current_user_id),
 ) -> dict:
-    image = _owned_image(image_id, user_id)
+    image = _active_image(image_id, user_id)
     question = payload.content.strip()
     if not question:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -214,7 +220,7 @@ def create_chat_message(
 def delete_chat_messages(
     image_id: int, user_id: int = Depends(get_current_user_id)
 ) -> None:
-    _owned_image(image_id, user_id)
+    _active_image(image_id, user_id)
     repo.clear_chat_messages(image_id, user_id)
 
 
@@ -261,7 +267,7 @@ def get_humanization(
 def generate_humanization(
     image_id: int, user_id: int = Depends(get_current_user_id)
 ) -> repo.Row:
-    row = _owned_image(image_id, user_id)
+    row = _active_image(image_id, user_id)
     try:
         model, prompt, text = humanization.humanize_image(row)
     except humanization.HumanizationUnavailable as exc:
@@ -282,7 +288,7 @@ def put_humanization(
     payload: HumanizationIn,
     user_id: int = Depends(get_current_user_id),
 ) -> repo.Row:
-    _owned_image(image_id, user_id)
+    _active_image(image_id, user_id)
     return repo.upsert_humanization(
         image_id,
         user_id,
@@ -299,7 +305,7 @@ def patch_humanization(
     payload: HumanizationUpdate,
     user_id: int = Depends(get_current_user_id),
 ) -> repo.Row:
-    _owned_image(image_id, user_id)
+    _active_image(image_id, user_id)
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -312,6 +318,6 @@ def patch_humanization(
 def delete_humanization(
     image_id: int, user_id: int = Depends(get_current_user_id)
 ) -> None:
-    _owned_image(image_id, user_id)
+    _active_image(image_id, user_id)
     if not repo.delete_humanization(image_id, user_id):
         raise HTTPException(status_code=404, detail="Humanization not found")

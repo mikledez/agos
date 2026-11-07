@@ -30,8 +30,19 @@ calls Render server-side.
    - `GROQ_API_KEY` — from https://console.groq.com/keys.
 3. `AGOS_ALLOW_DEV_USER` is `0`; never enable it in staging/production.
 4. The default blueprint uses Render's **free** plan. Uploaded images are stored
-   in Neon (`image_files`), so they survive restarts and redeploys.
-   **Apply the schema to Neon (step 1) before deploying this change.**
+   in Neon (`image_files`), so they survive restarts and redeploys. To limit
+   database growth, an image and its analysis and chat are deleted after
+   `AGOS_IMAGE_RETENTION_HOURS` (48) without activity. Opening, renaming, or
+   moving an image, or using its AI feedback or chat, counts as activity;
+   thumbnails do not. Cleanup runs when the service starts and every 10 minutes
+   while it is awake. Folders are kept.
+   **Apply the schema to Neon (step 1) before deploying this change.** Once it
+   is deployed, remove records whose files were already lost, once only. This
+   also deletes their analysis and chat. Without `--yes` it only prints a count:
+   ```bash
+   DATABASE_URL='...' python backend/scripts/delete_lost_images.py
+   DATABASE_URL='...' python backend/scripts/delete_lost_images.py --yes
+   ```
    The free 512 MB instance can be tight for both ONNX models; if analysis is
    OOM-killed, use the Starter plan.
 5. Build downloads the ONNX models via `scripts/download_models.py` (skips

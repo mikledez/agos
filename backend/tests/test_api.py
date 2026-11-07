@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import datetime, timedelta, timezone
 
 import cv2
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 import main
 from db import repository as repo
+from db.connection import get_pool
 from services import humanization, image_service, storage
 
 
@@ -163,6 +165,144 @@ def test_delete_image_removes_files(client, fake_analysis):
     assert client.delete(f"/images/{body['image_id']}").status_code == 204
     assert repo.get_original_file(body["image_id"], user_id) is None
     assert client.get(f"/images/{body['image_id']}").status_code == 404
+
+def _age_image(image_id, *, hours):
+    with get_pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE image_files
+            SET last_activity_at = now() - make_interval(hours => %s)
+            WHERE image_id = %s
+            """,
+            (hours, image_id),
+        )
+        conn.commit()
+
+def _image_exists(image_id):
+    user_id = repo.get_user_by_email("dev@local")["id"]
+    return repo.get_image(image_id, user_id) is not None
+
+def test_purge_deletes_only_images_idle_past_the_limit(client, fake_analysis):
+    folder = client.post("/sessions", json={"name": "Keep me"}).json()
+    idle = _upload(client, session_id=folder["id"]).json()["image_id"]
+    recent = _upload(client).json()["image_id"]
+    user_id = repo.get_user_by_email("dev@local")["id"]
+    repo.upsert_humanization(idle, user_id, model="m", humanized_text="text")
+    _age_image(idle, hours=49)
+    _age_image(recent, hours=47)
+
+    assert image_service.purge_inactive_images() == 1
+
+    assert not _image_exists(idle)
+    assert repo.get_original_file(idle, user_id) is None
+    assert repo.get_humanization(idle, user_id) is None
+    assert _image_exists(recent)
+    assert client.get(f"/sessions/{folder['id']}").status_code == 200
+
+def test_purge_keeps_older_images_without_stored_bytes(client):
+    client.get("/me")
+    user_id = repo.get_user_by_email("dev@local")["id"]
+    legacy = repo.create_image(
+        user_id,
+        original_filename="old.jpg",
+        stored_filename="users/1/images/old.jpg",
+        phase="toe_off",
+        direction="ltr",
+    )
+
+    assert image_service.purge_inactive_images() == 0
+    assert _image_exists(legacy["id"])
+    assert client.get(f"/images/{legacy['id']}/file").status_code == 404
+
+def test_lost_image_cleanup_only_removes_old_records_without_bytes(
+    client, fake_analysis
+):
+    client.get("/me")
+    user_id = repo.get_user_by_email("dev@local")["id"]
+    make_record = lambda name: repo.create_image(
+        user_id,
+        original_filename=name,
+        stored_filename=f"users/1/images/{name}",
+        phase="toe_off",
+        direction="ltr",
+    )["id"]
+    lost = make_record("lost.jpg")
+    still_saving = make_record("saving.jpg")
+    stored = _upload(client).json()["image_id"]
+    repo.upsert_humanization(lost, user_id, model="m", humanized_text="text")
+    with get_pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE images SET created_at = now() - interval '2 hours'
+            WHERE id = ANY(%s)
+            """,
+            ([lost, stored],),
+        )
+        conn.commit()
+
+    assert repo.count_images_without_files() == 1
+    assert _image_exists(lost)
+
+    assert repo.delete_images_without_files() == 1
+
+    assert not _image_exists(lost)
+    assert repo.get_humanization(lost, user_id) is None
+    assert _image_exists(still_saving)
+    assert _image_exists(stored)
+
+@pytest.mark.parametrize(
+    "keep_alive",
+    [
+        lambda client, image_id: client.get(f"/images/{image_id}"),
+        lambda client, image_id: client.patch(
+            f"/images/{image_id}", json={"original_filename": "new.png"}
+        ),
+        lambda client, image_id: client.put(
+            f"/images/{image_id}/humanization",
+            json={"model": "m", "humanized_text": "text"},
+        ),
+    ],
+    ids=["open", "rename", "feedback"],
+)
+def test_activity_resets_the_inactivity_clock(client, fake_analysis, keep_alive):
+    image_id = _upload(client).json()["image_id"]
+    _age_image(image_id, hours=49)
+
+    assert keep_alive(client, image_id).status_code == 200
+
+    assert image_service.purge_inactive_images() == 0
+    assert _image_exists(image_id)
+
+def test_thumbnails_do_not_reset_the_inactivity_clock(client, fake_analysis):
+    body = _upload(client).json()
+    _age_image(body["image_id"], hours=49)
+
+    assert client.get(body["annotated_url"]).status_code == 200
+    assert client.get(body["original_url"]).status_code == 200
+    assert client.get("/images").status_code == 200
+
+    assert image_service.purge_inactive_images() == 1
+
+def test_opening_an_image_does_not_change_its_updated_at(client, fake_analysis):
+    image_id = _upload(client).json()["image_id"]
+    user_id = repo.get_user_by_email("dev@local")["id"]
+    before = repo.get_image(image_id, user_id)["updated_at"]
+
+    client.get(f"/images/{image_id}")
+
+    assert repo.get_image(image_id, user_id)["updated_at"] == before
+
+def test_app_startup_runs_the_purge(monkeypatch):
+    ran = threading.Event()
+
+    def fake_purge():
+        ran.set()
+        return 0
+
+    monkeypatch.setattr(image_service, "purge_inactive_images", fake_purge)
+    monkeypatch.setattr(main, "close_pool", lambda: None)
+    with TestClient(main.app):
+        assert ran.wait(timeout=5)
 
 def _analysis_upload(client):
     ok, encoded = cv2.imencode(".jpg", np.zeros((8, 8, 3), np.uint8))

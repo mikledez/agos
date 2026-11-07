@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -9,10 +11,29 @@ from fastapi.responses import JSONResponse
 from api import health, images, sessions, users
 from db import repository as repo
 from db.connection import close_pool
+from services import image_service
+
+logger = logging.getLogger(__name__)
+
+PURGE_INTERVAL_SECONDS = 600
+
+async def _purge_inactive_images_forever() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(image_service.purge_inactive_images)
+        except Exception:
+            logger.exception("could not delete inactive images")
+        await asyncio.sleep(PURGE_INTERVAL_SECONDS)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    purge_task = asyncio.create_task(_purge_inactive_images_forever())
     yield
+    purge_task.cancel()
+    try:
+        await purge_task
+    except asyncio.CancelledError:
+        pass
     close_pool()
 
 app = FastAPI(

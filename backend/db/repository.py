@@ -531,6 +531,50 @@ def get_original_file(image_id: int, user_id: int) -> bytes | None:
 def get_annotated_file(image_id: int, user_id: int) -> bytes | None:
     return _get_image_file(image_id, user_id, "annotated")
 
+def touch_image_activity(image_id: int, user_id: int) -> None:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            UPDATE image_files SET last_activity_at = now()
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+
+_NO_STORED_FILES = """
+    NOT EXISTS (SELECT 1 FROM image_files AS f WHERE f.image_id = i.id)
+    AND i.created_at < now() - interval '1 hour'
+"""
+
+def count_images_without_files() -> int:
+    with _cursor() as cur:
+        cur.execute(
+            f"SELECT count(*) AS total FROM images AS i WHERE {_NO_STORED_FILES}"
+        )
+        return cur.fetchone()["total"]
+
+def delete_images_without_files() -> int:
+    """One-off cleanup; the age check protects uploads that are still saving."""
+
+    with _cursor() as cur:
+        cur.execute(f"DELETE FROM images AS i WHERE {_NO_STORED_FILES}")
+        return cur.rowcount
+
+def delete_inactive_images(retention_hours: int) -> int:
+    """Delete images idle past the limit; older rows without stored bytes stay."""
+
+    with _cursor() as cur:
+        cur.execute(
+            """
+            DELETE FROM images AS i
+            USING image_files AS f
+            WHERE f.image_id = i.id
+              AND f.last_activity_at < now() - make_interval(hours => %s)
+            """,
+            (retention_hours,),
+        )
+        return cur.rowcount
+
 def list_chat_messages(
     image_id: int, user_id: int, limit: int = 50
 ) -> list[Row]:
