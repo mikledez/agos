@@ -7,13 +7,13 @@ import { Wordmark } from "@/components/wordmark";
 
 async function signInWithGoogle() {
   "use server";
-  await signIn("google", { redirectTo: "/library" });
+  await signIn("google", { redirectTo: "/" });
 }
 
 async function signInWithDev(formData: FormData) {
   "use server";
   const email = String(formData.get("email") ?? "");
-  await signIn("dev", { email, redirectTo: "/library" });
+  await signIn("dev", { email, redirectTo: "/" });
 }
 
 export default async function LoginPage({
