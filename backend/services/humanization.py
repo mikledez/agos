@@ -27,29 +27,50 @@ import urllib.request
 from functools import lru_cache
 from typing import Any
 
-from .analysis import RANGES
+from .analysis import JOINTS, RANGES, assess, thigh_gap_to_show
 
 LOCAL_DEFAULT_MODEL = "HuggingFaceTB/SmolLM2-1.7B-Instruct"
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-20b"
 GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+_AUDIENCE = (
+    "Your readers range from beginners fixing their own sprint form to "
+    "coaches, so lead with simple body-position language and a cue the "
+    "athlete can feel or do, while naming the leg, joint, and sprint phase "
+    "precisely enough for a coach to use. The swing leg is the leg in the "
+    "air; the stance leg is the leg on the ground. "
+)
+
 SYSTEM_PROMPT = (
-    "You are a sprint biomechanics coach. You receive measured lower-limb "
-    "joint angles, the reference range for the sprint phase, and rule-based "
-    "feedback. Write 2-3 short, concrete sentences telling the athlete what "
-    "is good and what to adjust. Use plain text only, no markdown or lists. "
-    "Do not invent measurements or give medical advice."
+    "You are a sprint coach reviewing one photo. "
+    + _AUDIENCE
+    + "You receive a plain-language check of each joint: what is off and a "
+    "cue to fix it, plus what already looks good. Write 2-4 short sentences: "
+    "start with the most important fix, then any other fixes, then briefly "
+    "say what looks good. Describe positions in words such as too bent, too "
+    "straight, thigh too low, or foot landing too far in front. Never state "
+    "degrees, angle numbers, or reference ranges. Use plain text only, no "
+    "markdown or lists. Do not invent problems or give medical advice."
 )
 
 CHAT_SYSTEM_PROMPT = (
-    "You are AGOS, a sprint biomechanics coach answering questions about one "
-    "analyzed sprint photo. Use only the supplied measurements and reference "
-    "ranges; never invent numbers. Answer the athlete's question directly in "
-    "2-4 concise sentences of plain text, with no markdown or lists. When "
-    "asked for help or drills, give practical cues or drill suggestions. Do "
-    "not provide a medical diagnosis."
+    "You are AGOS, a sprint coach answering questions about one analyzed "
+    "sprint photo. "
+    + _AUDIENCE
+    + "Answer in 2-4 concise sentences of plain text, with no markdown or "
+    "lists, using the position check in words and practical cues or drills. "
+    "Only give degrees or reference ranges when the athlete explicitly asks "
+    "for numbers or angles; then use the supplied measurements and never "
+    "invent numbers. Do not provide a medical diagnosis."
 )
+
+_PHASE_NAMES = {
+    "toe_off": "toe-off (the moment the back foot leaves the ground)",
+    "mid_stance": "mid-stance (the body passing over the foot on the ground)",
+    "touchdown": "touchdown (the moment the front foot lands)",
+}
+_CHECK_NAMES = {"hip": "thigh position", "knee": "knee bend", "ankle": "ankle and foot"}
 
 MAX_CHAT_QUESTION_CHARS = 1000
 MAX_CHAT_HISTORY_MESSAGES = 12
@@ -115,33 +136,62 @@ def _generator(model_id: str) -> Any:
     )
 
 
-def build_payload(image: dict[str, Any]) -> dict[str, Any]:
+def _leg_angles(image: dict[str, Any], role: str) -> dict[str, float | None]:
+    return {joint: image.get(f"{role}_{joint}") for joint in JOINTS}
+
+
+def _describe_leg(checks: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    fixes = []
+    looks_good = []
+    for joint in JOINTS:
+        check = checks[joint]
+        if check["status"] == "good":
+            looks_good.append(_CHECK_NAMES[joint])
+        else:
+            fixes.append({"problem": check["problem"], "fix": check["cue"]})
+    return {"fixes": fixes, "looks_good": looks_good}
+
+
+def build_payload(
+    image: dict[str, Any], *, include_measurements: bool = False
+) -> dict[str, Any]:
+    """Describe the analysis in words; angles only when explicitly included."""
+
     phase = image["phase"]
-    return {
-        "phase": phase,
-        "direction": image["direction"],
-        "swing_leg": {
-            "hip": image.get("swing_hip"),
-            "knee": image.get("swing_knee"),
-            "ankle": image.get("swing_ankle"),
-            "feedback": image.get("swing_feedback"),
-        },
-        "stance_leg": {
-            "hip": image.get("stance_hip"),
-            "knee": image.get("stance_knee"),
-            "ankle": image.get("stance_ankle"),
-            "feedback": image.get("stance_feedback"),
-        },
-        "thigh_thigh": image.get("thigh_thigh"),
-        "overall_feedback": image.get("feedback"),
-        "reference_ranges": RANGES[phase],
+    checks = assess(
+        phase,
+        _leg_angles(image, "swing"),
+        _leg_angles(image, "stance"),
+        image.get("thigh_thigh"),
+    )
+    payload: dict[str, Any] = {
+        "phase": _PHASE_NAMES.get(phase, phase),
+        "swing_leg": _describe_leg(checks["swing"]),
+        "stance_leg": _describe_leg(checks["stance"]),
     }
+    thigh_check = thigh_gap_to_show(checks)
+    if checks["thigh_thigh"] is not None and thigh_check is not None:
+        payload["thigh_gap_between_legs"] = (
+            "looks good"
+            if thigh_check["status"] == "good"
+            else {"problem": thigh_check["problem"], "fix": thigh_check["cue"]}
+        )
+    if include_measurements:
+        payload["measurements_only_if_asked"] = {
+            "angles_degrees": {
+                "swing_leg": _leg_angles(image, "swing"),
+                "stance_leg": _leg_angles(image, "stance"),
+                "thigh_gap": image.get("thigh_thigh"),
+            },
+            "target_ranges_degrees": RANGES[phase],
+        }
+    return payload
 
 
 def build_user_prompt(image: dict[str, Any]) -> str:
     payload = build_payload(image)
     return (
-        "Analysis metadata (angles in degrees):\n"
+        "Position check for this photo:\n"
         f"{json.dumps(payload, ensure_ascii=True)}\n\n"
         "Coach feedback:"
     )
@@ -310,12 +360,12 @@ def _build_chat_messages(
     existing_feedback: str | None,
 ) -> list[dict[str, str]]:
     context = {
-        "analysis": build_payload(image),
+        "analysis": build_payload(image, include_measurements=True),
         "existing_ai_feedback": existing_feedback,
     }
     system_content = (
         f"{CHAT_SYSTEM_PROMPT}\n\n"
-        "Analysis context (angles in degrees):\n"
+        "Analysis context:\n"
         f"{json.dumps(context, ensure_ascii=True)}"
     )
 

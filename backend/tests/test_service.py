@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import urllib.error
 
 import pytest
@@ -48,27 +49,37 @@ def test_rejects_oversized_upload():
         )
 
 
-def test_humanization_prompt_uses_metadata_and_reference_ranges():
-    prompt = humanization.build_prompt(
+def test_humanization_prompt_describes_positions_without_numbers():
+    image = {**_humanization_image(), "stance_knee": 170.0}
+
+    payload = humanization.build_payload(image)
+    prompt = humanization.build_prompt(image)
+
+    assert payload["stance_leg"]["fixes"] == [
         {
-            "phase": "touchdown",
-            "direction": "ltr",
-            "swing_hip": 160.0,
-            "swing_knee": 45.0,
-            "swing_ankle": 120.0,
-            "swing_feedback": "Good positions",
-            "stance_hip": 146.0,
-            "stance_knee": 150.0,
-            "stance_ankle": 100.0,
-            "stance_feedback": "Good positions",
-            "thigh_thigh": 15.0,
-            "feedback": "Good positions",
+            "problem": "Knee too straight at landing",
+            "fix": "Land with a slight bend in the knee.",
         }
-    )
+    ]
+    assert payload["swing_leg"]["looks_good"] == [
+        "thigh position", "knee bend", "ankle and foot"
+    ]
+    assert payload["thigh_gap_between_legs"] == "looks good"
     assert "touchdown" in prompt
-    assert '"hip": 160.0' in prompt
-    assert '"thigh_thigh": 15.0' in prompt
-    assert '"reference_ranges"' in prompt
+    assert not re.search(r"\d", json.dumps(payload))
+    assert "Never state degrees" in prompt
+
+
+def test_chat_context_keeps_measurements_for_when_numbers_are_asked_for():
+    messages = humanization._build_chat_messages(
+        _humanization_image(), [], "What was my knee angle?", None
+    )
+    system = messages[0]["content"]
+
+    assert "Only give degrees or reference ranges when the athlete" in system
+    assert '"measurements_only_if_asked"' in system
+    assert '"knee": 150.0' in system
+    assert messages[-1] == {"role": "user", "content": "What was my knee angle?"}
 
 
 def _humanization_image():
@@ -138,8 +149,10 @@ def test_groq_humanization_posts_metadata_only(monkeypatch):
     assert captured["body"]["reasoning_effort"] == "low"
     assert captured["body"]["temperature"] == 0
     assert captured["body"]["messages"][0]["role"] == "system"
-    assert '"hip": 160.0' in captured["body"]["messages"][1]["content"]
-    assert '"reference_ranges"' in prompt
+    user_content = captured["body"]["messages"][1]["content"]
+    assert '"swing_leg"' in user_content
+    assert "160" not in user_content
+    assert "Position check for this photo" in prompt
 
 
 def test_groq_humanization_falls_back_when_model_missing(monkeypatch):
