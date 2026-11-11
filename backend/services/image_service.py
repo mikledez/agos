@@ -13,7 +13,8 @@ from db import repository as repo
 
 from . import storage
 from .analysis import analyze_angles
-from .pose import draw_landmarks_on_image, get_pose_landmarks
+from .overlay import draw_feedback
+from .pose import get_pose_landmarks
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,9 @@ def analyze_and_store(
         raise ValueError(str(exc)) from exc
     _assert_finite(result)
 
-    annotated = draw_landmarks_on_image(image, pose_landmarks)
+    annotated = draw_feedback(
+        image, pose_landmarks, landmarks, result, phase, direction
+    )
     ok, encoded = cv2.imencode(
         ".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, ANNOTATED_JPEG_QUALITY]
     )

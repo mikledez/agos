@@ -96,24 +96,255 @@ def _measure_leg(points):
     }
 
 
-def _check_leg(angles, optimal):
-    issues = []
-    for angle_key, range_key, label in (
-        ("hip_angle", "hip", "Hip"),
-        ("knee_angle", "knee", "Knee"),
-        ("ankle_angle", "ankle", "Ankle"),
-    ):
-        v = angles[angle_key]
-        if v != v:
-            issues.append(f"{label} (low confidence)")
-            continue
-        lo, hi = optimal[range_key]
-        if not lo <= v <= hi:
-            issues.append(label)
+JOINTS = ("hip", "knee", "ankle")
+_JOINT_NAMES = {
+    "hip": "Thigh",
+    "knee": "Knee",
+    "ankle": "Ankle",
+    "thigh_thigh": "Thigh gap",
+}
 
-    if issues:
-        return f"{', '.join(issues)} outside optimal range"
-    return "Good positions"
+# Plain-language (problem, fix cue) per side of the target range.
+# Hip: lower value = thigh further forward/up. Knee: lower = more bent.
+# Ankle: lower = toes pulled up / shin over the foot, higher = toes pointing down.
+_MESSAGES = {
+    ("swing", "hip"): {
+        "low": ("Thigh too high", "Drive the knee forward rather than up."),
+        "high": ("Thigh too low", "Drive the knee forward and up sooner."),
+    },
+    ("swing", "knee"): {
+        "low": ("Knee too bent", "Let the lower leg open out a little more."),
+        "high": (
+            "Knee too straight",
+            "Bend the knee more and bring the heel up toward the hip.",
+        ),
+    },
+    ("swing", "ankle"): {
+        "low": (
+            "Toes pulled up too far",
+            "Relax the ankle slightly; keep the foot firm but not cranked up.",
+        ),
+        "high": (
+            "Toes pointing down",
+            "Pull the toes up toward the shin as the leg swings through.",
+        ),
+    },
+    ("stance", "knee"): {
+        "low": (
+            "Knee too bent",
+            "Stay tall and stiff through the leg so it doesn't collapse under you.",
+        ),
+        "high": (
+            "Knee too straight",
+            "Keep a slight bend in the knee instead of locking it.",
+        ),
+    },
+}
+
+_PHASE_MESSAGES = {
+    ("toe_off", "swing", "hip"): {
+        "low": (
+            "Thigh too high",
+            "Aim for the thigh about level with the hips; drive forward, not up.",
+        ),
+        "high": (
+            "Thigh too low",
+            "Drive the knee up toward hip height as you push off.",
+        ),
+    },
+    ("touchdown", "swing", "hip"): {
+        "low": (
+            "Knee too far forward",
+            "Time the knee drive so the knee is just in front of the hips as "
+            "the other foot lands.",
+        ),
+        "high": (
+            "Knee trailing behind",
+            "Bring the knee through faster so it is level with the hips when "
+            "the other foot lands.",
+        ),
+    },
+    ("toe_off", "stance", "hip"): {
+        "low": (
+            "Leg not extended back enough",
+            "Push all the way through the ground until the leg is extended "
+            "behind you.",
+        ),
+        "high": (
+            "Leg too far behind",
+            "Lift the foot off sooner and start bringing the leg through.",
+        ),
+    },
+    ("mid_stance", "stance", "hip"): {
+        "low": (
+            "Foot too far in front of the hips",
+            "Let the foot land closer under your hips.",
+        ),
+        "high": (
+            "Hips too far ahead of the foot",
+            "Keep the hips stacked over the foot as you pass over it.",
+        ),
+    },
+    ("touchdown", "stance", "hip"): {
+        "low": (
+            "Foot landing too far in front",
+            "You are overstriding; land with the foot closer under your hips.",
+        ),
+        "high": (
+            "Foot landing too close under the body",
+            "Let the foot land slightly in front of your hips.",
+        ),
+    },
+    ("mid_stance", "stance", "knee"): {
+        "high": (
+            "Knee too straight",
+            "Keep a slight bend in the knee to absorb the landing.",
+        ),
+    },
+    ("touchdown", "stance", "knee"): {
+        "high": (
+            "Knee too straight at landing",
+            "Land with a slight bend in the knee.",
+        ),
+    },
+    ("toe_off", "stance", "ankle"): {
+        "low": (
+            "Not pushing through the toes",
+            "Finish the push through the ball of the foot and toes.",
+        ),
+        "high": (
+            "Ankle over-extended",
+            "Don't over-point the toes; push through the ball of the foot.",
+        ),
+    },
+    ("mid_stance", "stance", "ankle"): {
+        "low": (
+            "Ankle collapsing",
+            "Stay up on the ball of the foot and keep the ankle stiff.",
+        ),
+        "high": (
+            "Toes pointing down too much",
+            "Let the ankle flex a little as your body passes over the foot.",
+        ),
+    },
+    ("touchdown", "stance", "ankle"): {
+        "low": (
+            "Toes pulled up at landing",
+            "Land on the ball of the foot, not the heel.",
+        ),
+        "high": (
+            "Toes pointing down at landing",
+            "Pull the toes up slightly before the foot hits the ground.",
+        ),
+    },
+    ("touchdown", None, "thigh_thigh"): {
+        "low": (
+            "Thighs too close together",
+            "Let the landing leg reach a little further in front of the "
+            "swing knee.",
+        ),
+        "high": (
+            "Swing knee trailing behind",
+            "Bring the swing knee through faster so the knees are close "
+            "together when the foot lands.",
+        ),
+    },
+}
+
+
+def _messages(phase, role, joint):
+    return {
+        **_MESSAGES.get((role, joint), {}),
+        **_PHASE_MESSAGES.get((phase, role, joint), {}),
+    }
+
+
+def assess_joint(phase, role, joint, value):
+    """Return {status, problem, cue} for one joint.
+
+    ``status`` is ``good``, ``low`` (below the target range), ``high`` (above
+    it), or ``unclear`` (not measured).
+    """
+    spec = RANGES[phase]
+    lo, hi = spec["thigh_thigh"] if joint == "thigh_thigh" else spec[role][joint]
+    if value is None or value != value:
+        name = _JOINT_NAMES[joint]
+        return {
+            "status": "unclear",
+            "problem": f"{name} not clearly visible",
+            "cue": "Retake the photo with the whole leg in frame.",
+        }
+    if lo <= value <= hi:
+        return {"status": "good", "problem": None, "cue": None}
+    status = "low" if value < lo else "high"
+    problem, cue = _messages(phase, role, joint)[status]
+    return {"status": status, "problem": problem, "cue": cue}
+
+
+def _sentence(check):
+    cue = check["cue"]
+    return f"{check['problem']} – {cue[0].lower()}{cue[1:]}"
+
+
+def leg_feedback(checks):
+    issues = [checks[j] for j in JOINTS if checks[j]["status"] != "good"]
+    if not issues:
+        return "Good position."
+    return " ".join(_sentence(check) for check in issues)
+
+
+def thigh_gap_to_show(checks):
+    """The thigh-gap check, unless the swing thigh check already says the same.
+
+    At touchdown a trailing (or over-driven) swing thigh also widens (or
+    narrows) the gap, so showing both would repeat one problem twice.
+    """
+    gap = checks.get("thigh_thigh")
+    if gap is None or gap["status"] not in ("low", "high"):
+        return gap
+    if checks["swing"]["hip"]["status"] == gap["status"]:
+        return None
+    return gap
+
+
+def overall_feedback(swing_checks, stance_checks, thigh_check=None):
+    parts = []
+    for label, checks in (
+        ("Swing leg", swing_checks),
+        ("Stance leg", stance_checks),
+    ):
+        problems = [
+            checks[j]["problem"].lower()
+            for j in JOINTS
+            if checks[j]["status"] != "good"
+        ]
+        parts.append(
+            f"{label}: {', '.join(problems)}." if problems
+            else f"{label}: good position."
+        )
+    if thigh_check is not None and thigh_check["status"] != "good":
+        parts.append(f"{_sentence(thigh_check)}")
+    return " ".join(parts)
+
+
+def assess(phase, swing, stance, thigh_thigh=None):
+    """Plain-language checks for stored or freshly measured angles.
+
+    ``swing``/``stance`` map hip/knee/ankle to degrees (or None).
+    """
+    checks = {
+        role: {
+            joint: assess_joint(phase, role, joint, angles.get(joint))
+            for joint in JOINTS
+        }
+        for role, angles in (("swing", swing), ("stance", stance))
+    }
+    checks["thigh_thigh"] = (
+        assess_joint(phase, None, "thigh_thigh", thigh_thigh)
+        if "thigh_thigh" in RANGES[phase]
+        else None
+    )
+    return checks
 
 
 def _mirror_landmarks(landmarks):
@@ -161,7 +392,8 @@ def analyze_angles(landmarks, phase="toe_off", direction="ltr"):
     )
 
     best = None
-    for swing_pts, stance_pts in candidates:
+    for swing_slots, stance_slots in candidates:
+        swing_pts, stance_pts = swing_slots, stance_slots
         swing_points = [norm[i] for i in swing_pts]
         stance_points = [norm[i] for i in stance_pts]
 
@@ -178,6 +410,7 @@ def analyze_angles(landmarks, phase="toe_off", direction="ltr"):
                 "stance": stance,
                 "swing_points": swing_points,
                 "stance_points": stance_points,
+                "slots": {"swing": swing_slots, "stance": stance_slots},
             }
 
     if best is None or best["penalty"] >= 1e6:
@@ -187,38 +420,34 @@ def analyze_angles(landmarks, phase="toe_off", direction="ltr"):
     swing_points = best["swing_points"]
     stance_points = best["stance_points"]
 
-    swing["feedback"] = _check_leg(swing, spec["swing"])
-    stance["feedback"] = _check_leg(stance, spec["stance"])
-
-    parts = []
-    if swing["feedback"] != "Good positions":
-        parts.append(f"Swing leg: {swing['feedback']}")
-    if stance["feedback"] != "Good positions":
-        parts.append(f"Stance leg: {stance['feedback']}")
-
     result = {
         "phase": phase,
         "swing_leg": swing,
         "stance_leg": stance,
+        "slots": best["slots"],
     }
 
+    thigh_thigh_angle = None
     if "thigh_thigh" in spec:
-        if not all(_is_visible(p) for p in swing_points[:2] + stance_points[:2]):
-            thigh_thigh_angle = float("nan")
-        else:
+        if all(_is_visible(p) for p in swing_points[:2] + stance_points[:2]):
             front_thigh = _vector(swing_points[0], swing_points[1])
             back_thigh = _vector(stance_points[0], stance_points[1])
-            thigh_thigh_angle = _angle_between(front_thigh, back_thigh)
-            thigh_thigh_angle = round(thigh_thigh_angle, 1) if thigh_thigh_angle == thigh_thigh_angle else float("nan")
-        if thigh_thigh_angle != thigh_thigh_angle:
-            result["thigh_thigh_angle"] = None
-            parts.append("Thighs outside optimal range (low confidence)")
-        else:
-            result["thigh_thigh_angle"] = thigh_thigh_angle
-            lo, hi = spec["thigh_thigh"]
-            if not lo <= thigh_thigh_angle <= hi:
-                parts.append("Thighs outside optimal range")
+            measured = _angle_between(front_thigh, back_thigh)
+            if measured == measured:
+                thigh_thigh_angle = round(measured, 1)
+        result["thigh_thigh_angle"] = thigh_thigh_angle
 
-    result["feedback"] = "; ".join(parts) if parts else "Good positions"
+    checks = assess(
+        phase,
+        {joint: swing[f"{joint}_angle"] for joint in JOINTS},
+        {joint: stance[f"{joint}_angle"] for joint in JOINTS},
+        thigh_thigh_angle,
+    )
+    swing["feedback"] = leg_feedback(checks["swing"])
+    stance["feedback"] = leg_feedback(checks["stance"])
+    result["checks"] = checks
+    result["feedback"] = overall_feedback(
+        checks["swing"], checks["stance"], thigh_gap_to_show(checks)
+    )
 
     return result
