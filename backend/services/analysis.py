@@ -281,16 +281,15 @@ def assess_joint(phase, role, joint, value):
     return {"status": status, "problem": problem, "cue": cue}
 
 
-def _sentence(check):
-    cue = check["cue"]
-    return f"{check['problem']} – {cue[0].lower()}{cue[1:]}"
-
-
 def leg_feedback(checks):
-    issues = [checks[j] for j in JOINTS if checks[j]["status"] != "good"]
-    if not issues:
-        return "Good position."
-    return " ".join(_sentence(check) for check in issues)
+    """Short list of what's off, e.g. "Thigh too high, Toes pulled up too far".
+
+    Fix cues are left to the AI coach.
+    """
+    problems = [
+        checks[j]["problem"] for j in JOINTS if checks[j]["status"] != "good"
+    ]
+    return ", ".join(problems) if problems else "Good position"
 
 
 def thigh_gap_to_show(checks):
@@ -323,7 +322,7 @@ def overall_feedback(swing_checks, stance_checks, thigh_check=None):
             else f"{label}: good position."
         )
     if thigh_check is not None and thigh_check["status"] != "good":
-        parts.append(f"{_sentence(thigh_check)}")
+        parts.append(f"{thigh_check['problem']}.")
     return " ".join(parts)
 
 
