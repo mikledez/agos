@@ -12,6 +12,8 @@ import main
 from db import repository as repo
 from db.connection import get_pool
 from services import humanization, image_service, storage
+from test_feedback import _landmarks as synthetic_landmarks
+from test_feedback import _pose_info as synthetic_pose_info
 
 
 def auth_headers(email: str) -> dict[str, str]:
@@ -315,14 +317,11 @@ def _analysis_upload(client):
 
 @pytest.fixture
 def fake_pose(monkeypatch):
+    landmarks = synthetic_landmarks()
     monkeypatch.setattr(
-        image_service, "get_pose_landmarks", lambda _image: ([object()], object())
-    )
-    monkeypatch.setattr(
-        image_service, "analyze_angles", lambda *_args: FAKE_RESULT
-    )
-    monkeypatch.setattr(
-        image_service, "draw_landmarks_on_image", lambda image, _landmarks: image
+        image_service,
+        "get_pose_landmarks",
+        lambda _image: (landmarks, synthetic_pose_info(landmarks)),
     )
 
 def test_analyze_stores_both_images_in_the_database(client, fake_pose):
@@ -336,6 +335,11 @@ def test_analyze_stores_both_images_in_the_database(client, fake_pose):
     annotated = client.get(body["annotated_url"])
     assert annotated.status_code == 200
     assert annotated.content.startswith(b"\xff\xd8")
+
+    assert body["swing_leg"]["feedback"].startswith("Knee too straight – ")
+    image = client.get(f"/images/{body['image_id']}").json()["image"]
+    assert image["stance_feedback"].startswith("Leg too far behind – ")
+    assert image["feedback"].startswith("Swing leg: knee too straight")
 
 def test_analyze_removes_the_record_when_saving_images_fails(fake_pose, monkeypatch):
     client = TestClient(main.app, raise_server_exceptions=False)

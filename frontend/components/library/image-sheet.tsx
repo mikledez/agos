@@ -194,6 +194,12 @@ export function ImageSheet({
                 className="max-h-[440px] w-full object-contain"
               />
             </div>
+            {view === "annotated" && image.annotated_url ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                Green zones show where each body part should be. Red lines and
+                numbered markers show what to fix.
+              </p>
+            ) : null}
           </section>
 
           <section className="grid gap-3 sm:grid-cols-2">
