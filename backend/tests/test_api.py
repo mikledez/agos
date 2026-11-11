@@ -336,9 +336,9 @@ def test_analyze_stores_both_images_in_the_database(client, fake_pose):
     assert annotated.status_code == 200
     assert annotated.content.startswith(b"\xff\xd8")
 
-    assert body["swing_leg"]["feedback"].startswith("Knee too straight – ")
+    assert body["swing_leg"]["feedback"] == "Knee too straight, Toes pointing down"
     image = client.get(f"/images/{body['image_id']}").json()["image"]
-    assert image["stance_feedback"].startswith("Leg too far behind – ")
+    assert image["stance_feedback"] == "Leg too far behind, Knee too straight"
     assert image["feedback"].startswith("Swing leg: knee too straight")
 
 def test_analyze_removes_the_record_when_saving_images_fails(fake_pose, monkeypatch):

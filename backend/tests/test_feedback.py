@@ -80,9 +80,8 @@ def test_assess_joint_in_range_and_unclear():
 def test_analysis_feedback_is_plain_language_without_numbers():
     result = analysis.analyze_angles(_landmarks(), "toe_off", "ltr")
 
-    assert result["swing_leg"]["feedback"].startswith(
-        "Knee too straight – bend the knee more"
-    )
+    assert result["swing_leg"]["feedback"] == "Knee too straight, Toes pointing down"
+    assert result["stance_leg"]["feedback"] == "Leg too far behind, Knee too straight"
     assert result["feedback"] == (
         "Swing leg: knee too straight, toes pointing down. "
         "Stance leg: leg too far behind, knee too straight."
@@ -106,6 +105,12 @@ def test_thigh_gap_is_not_repeated_when_the_swing_thigh_says_the_same():
 
     gap_only = analysis.assess("touchdown", swing, stance, 40.0)
     assert analysis.thigh_gap_to_show(gap_only)["problem"] == "Swing knee trailing behind"
+    assert analysis.overall_feedback(
+        gap_only["swing"], gap_only["stance"], analysis.thigh_gap_to_show(gap_only)
+    ) == (
+        "Swing leg: good position. Stance leg: good position. "
+        "Swing knee trailing behind."
+    )
 
 
 def test_good_positions_read_as_good():
@@ -115,7 +120,7 @@ def test_good_positions_read_as_good():
     stance = {j: sum(spec["stance"][j]) / 2 for j in good}
     checks = analysis.assess("mid_stance", swing, stance)
 
-    assert analysis.leg_feedback(checks["swing"]) == "Good position."
+    assert analysis.leg_feedback(checks["swing"]) == "Good position"
     assert analysis.overall_feedback(checks["swing"], checks["stance"]) == (
         "Swing leg: good position. Stance leg: good position."
     )
