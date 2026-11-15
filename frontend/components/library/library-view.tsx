@@ -238,9 +238,7 @@ export function LibraryView({
                     key={image.id}
                     image={image}
                     href={imageHref(image)}
-                    src={backendAssetUrl(
-                      image.annotated_url ?? image.original_url,
-                    )}
+                    src={backendAssetUrl(image.thumbnail_url)}
                     onRename={(target) =>
                       setRenameTarget({
                         kind: "image",

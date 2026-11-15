@@ -44,13 +44,19 @@ def _active_image(image_id: int, user_id: int) -> repo.Row:
     repo.touch_image_activity(image_id, user_id)
     return row
 
-def _image_file_response(contents: bytes | None, *, media_type: str, missing_detail: str) -> Response:
+def _image_file_response(
+    contents: bytes | None,
+    *,
+    media_type: str,
+    missing_detail: str,
+    max_age: int = 3600,
+) -> Response:
     if contents is None:
         raise HTTPException(status_code=404, detail=missing_detail)
     return Response(
         contents,
         media_type=media_type,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={"Cache-Control": f"private, max-age={max_age}"},
     )
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -246,6 +252,30 @@ def get_annotated_image(
         repo.get_annotated_file(image_id, user_id),
         media_type="image/jpeg",
         missing_detail="Annotated image missing",
+    )
+
+@router.get("/images/{image_id}/thumbnail")
+def get_thumbnail(
+    image_id: int, user_id: int = Depends(get_current_user_id)
+) -> Response:
+    # Does not count as activity, so it never resets the retention clock.
+    sources = repo.get_thumbnail_sources(image_id, user_id)
+    if sources is None:
+        raise HTTPException(status_code=404, detail="Image not found")
+    thumbnail = sources["thumbnail"]
+    if thumbnail is None:
+        # Images uploaded before thumbnails existed get one on first view.
+        try:
+            thumbnail = image_service.thumbnail_from_bytes(sources["source"])
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Image file missing") from exc
+        repo.save_thumbnail(image_id, user_id, thumbnail)
+    # Image ids are never reused and the picture never changes, so cache for a week.
+    return _image_file_response(
+        thumbnail,
+        media_type="image/jpeg",
+        missing_detail="Image file missing",
+        max_age=7 * 24 * 3600,
     )
 
 @router.get(

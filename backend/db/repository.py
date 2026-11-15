@@ -500,15 +500,20 @@ def delete_image(image_id: int, user_id: int) -> bool:
         return cur.fetchone() is not None
 
 def save_image_files(
-    image_id: int, user_id: int, *, original: bytes, annotated: bytes | None
+    image_id: int,
+    user_id: int,
+    *,
+    original: bytes,
+    annotated: bytes | None,
+    thumbnail: bytes | None = None,
 ) -> None:
     with _cursor() as cur:
         cur.execute(
             """
-            INSERT INTO image_files (image_id, user_id, original, annotated)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO image_files (image_id, user_id, original, annotated, thumbnail)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (image_id, user_id, original, annotated),
+            (image_id, user_id, original, annotated, thumbnail),
         )
 
 def _get_image_file(image_id: int, user_id: int, column: str) -> bytes | None:
@@ -530,6 +535,42 @@ def get_original_file(image_id: int, user_id: int) -> bytes | None:
 
 def get_annotated_file(image_id: int, user_id: int) -> bytes | None:
     return _get_image_file(image_id, user_id, "annotated")
+
+def get_thumbnail_sources(image_id: int, user_id: int) -> Row | None:
+    """Thumbnail plus the image to build it from when it is missing.
+
+    One query; also proves ownership, since image_files carries user_id.
+    The source is only read when there is no thumbnail yet.
+    """
+
+    with _cursor() as cur:
+        cur.execute(
+            """
+            SELECT thumbnail,
+                   CASE WHEN thumbnail IS NULL
+                        THEN COALESCE(annotated, original) END AS source
+            FROM image_files
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (image_id, user_id),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        key: bytes(value) if value is not None else None
+        for key, value in row.items()
+    }
+
+def save_thumbnail(image_id: int, user_id: int, thumbnail: bytes) -> None:
+    with _cursor() as cur:
+        cur.execute(
+            """
+            UPDATE image_files SET thumbnail = %s
+            WHERE image_id = %s AND user_id = %s
+            """,
+            (thumbnail, image_id, user_id),
+        )
 
 def touch_image_activity(image_id: int, user_id: int) -> None:
     with _cursor() as cur:

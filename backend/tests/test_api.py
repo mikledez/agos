@@ -341,6 +341,54 @@ def test_analyze_stores_both_images_in_the_database(client, fake_pose):
     assert image["stance_feedback"] == "Leg too far behind, Knee too straight"
     assert image["feedback"].startswith("Swing leg: knee too straight")
 
+def _large_jpeg(width=1600, height=1200):
+    ok, encoded = cv2.imencode(".jpg", np.full((height, width, 3), 128, np.uint8))
+    assert ok
+    return encoded.tobytes()
+
+def test_analyze_stores_a_small_thumbnail(client, fake_pose):
+    response = client.post(
+        "/analyze",
+        files={"file": ("run.jpg", _large_jpeg(), "image/jpeg")},
+        data={"phase": "toe_off", "direction": "ltr"},
+    )
+    assert response.status_code == 200, response.text
+    image_id = response.json()["image_id"]
+
+    listed = client.get("/images").json()[0]
+    assert listed["thumbnail_url"] == f"/images/{image_id}/thumbnail"
+    thumbnail = client.get(listed["thumbnail_url"])
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"] == "image/jpeg"
+    assert "max-age=604800" in thumbnail.headers["cache-control"]
+    decoded = cv2.imdecode(np.frombuffer(thumbnail.content, np.uint8), cv2.IMREAD_COLOR)
+    assert decoded.shape[:2] == (image_service.THUMBNAIL_SHORT_SIDE, 640)
+
+def test_thumbnail_is_built_once_for_older_images(client):
+    user_id = repo.upsert_user("dev@local")["id"]
+    stored, annotated = storage.new_image_names(user_id, "old.jpg")
+    row = repo.create_image_from_analysis(
+        user_id,
+        original_filename="old.jpg",
+        stored_filename=stored,
+        phase="toe_off",
+        direction="ltr",
+        result=FAKE_RESULT,
+        annotated_path=annotated,
+    )
+    repo.save_image_files(
+        row["id"], user_id, original=b"x", annotated=_large_jpeg(1200, 1600)
+    )
+    _age_image(row["id"], hours=5)
+
+    response = client.get(f"/images/{row['id']}/thumbnail")
+    assert response.status_code == 200
+    stored_thumbnail = repo.get_thumbnail_sources(row["id"], user_id)
+    assert stored_thumbnail == {"thumbnail": response.content, "source": None}
+
+    # Thumbnails must not reset the 48-hour retention clock.
+    assert repo.delete_inactive_images(4) == 1
+
 def test_analyze_removes_the_record_when_saving_images_fails(fake_pose, monkeypatch):
     client = TestClient(main.app, raise_server_exceptions=False)
 
@@ -401,6 +449,8 @@ def test_users_cannot_see_each_others_images(client, fake_analysis):
         f"/images/{body['image_id']}", headers=headers
     ).status_code == 404
     assert client.get(body["original_url"], headers=headers).status_code == 404
+    thumbnail_url = f"/images/{body['image_id']}/thumbnail"
+    assert client.get(thumbnail_url, headers=headers).status_code == 404
     assert client.get("/images", headers=headers).json() == []
     assert client.get("/me", headers=headers).json()["email"] == "other@example.com"
 
