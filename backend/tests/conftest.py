@@ -22,6 +22,9 @@ def _database():
     try:
         init_db(TEST_DSN)
     except Exception as exc:
+        # In CI a missing database must fail the run, not skip every test.
+        if os.getenv("CI"):
+            raise
         pytest.skip(f"Postgres test database unavailable: {exc}")
     yield
     get_pool().close()
