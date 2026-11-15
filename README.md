@@ -36,7 +36,12 @@ Browser ──► Next.js (Vercel) ──► FastAPI (Render) ──► Postgres
 - **AI feedback:** only the analysis results are sent to Groq, never the
   image itself.
 - **Storage:** images and their small thumbnails are stored in Postgres. An
-  image is deleted after 48 hours without activity.
+  image is deleted after 48 hours without activity. Inside an athlete folder
+  only the full-size photo is removed; the measurements and thumbnail stay so
+  progress can be tracked over time.
+- **Athletes:** an athlete is a folder that shows a form score over time
+  (share of measured joints in range) and each joint's angle against its
+  target band, per phase, across all its subfolders.
 
 ## Tech stack
 

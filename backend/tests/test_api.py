@@ -69,7 +69,11 @@ def fake_analysis(monkeypatch):
             annotated_path=annotated,
         )
         repo.save_image_files(
-            row["id"], user_id, original=contents, annotated=b"annotated"
+            row["id"],
+            user_id,
+            original=contents,
+            annotated=b"annotated",
+            thumbnail=b"thumbnail",
         )
         return row, FAKE_RESULT, "QUJD"
 
@@ -589,3 +593,80 @@ def test_upload_size_limit(client, monkeypatch):
         data={"phase": "toe_off", "direction": "ltr"},
     )
     assert response.status_code == 413
+
+
+def test_athlete_folders_can_be_created_and_toggled(client):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"})
+    assert athlete.status_code == 201
+    assert athlete.json()["kind"] == "athlete"
+    plain = client.post("/sessions", json={"name": "Drills"}).json()
+    assert plain["kind"] == "folder"
+
+    url = f"/sessions/{plain['id']}"
+    assert client.patch(url, json={"kind": "athlete"}).json()["kind"] == "athlete"
+    assert client.patch(url, json={"kind": "folder"}).json()["kind"] == "folder"
+    assert client.patch(url, json={"kind": "coach"}).status_code == 422
+    assert client.post("/sessions", json={"name": "X", "kind": "team"}).status_code == 422
+
+def test_purge_keeps_athlete_measurements_but_drops_the_photo(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1", "parent_id": athlete["id"]}
+    ).json()
+    plain = client.post("/sessions", json={"name": "Misc"}).json()
+    kept = _upload(client, session_id=week["id"]).json()
+    dropped = _upload(client, session_id=plain["id"]).json()["image_id"]
+    _age_image(kept["image_id"], hours=49)
+    _age_image(dropped, hours=49)
+
+    assert image_service.purge_inactive_images() == 1
+
+    assert not _image_exists(dropped)
+    image = client.get(f"/images/{kept['image_id']}").json()["image"]
+    assert image["has_photo"] is False
+    assert image["annotated_url"] is None
+    assert image["swing_hip"] == 105.0
+    assert client.get(kept["original_url"]).status_code == 404
+    assert client.get(image["thumbnail_url"]).content == b"thumbnail"
+    listed = client.get(f"/images?session_id={week['id']}").json()
+    assert listed[0]["has_photo"] is False
+
+    # Already cleared images are left alone on the next run.
+    assert repo.clear_inactive_athlete_photos(48) == 0
+
+def test_recent_athlete_images_keep_their_photo(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    body = _upload(client, session_id=athlete["id"]).json()
+    _age_image(body["image_id"], hours=47)
+
+    image_service.purge_inactive_images()
+
+    image = client.get(f"/images/{body['image_id']}").json()["image"]
+    assert image["has_photo"] is True
+    assert client.get(body["original_url"]).status_code == 200
+
+def test_progress_covers_subfolders_oldest_first(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1", "parent_id": athlete["id"]}
+    ).json()
+    first = _upload(client, session_id=athlete["id"]).json()["image_id"]
+    second = _upload(client, session_id=week["id"]).json()["image_id"]
+    _upload(client)  # outside the athlete, not counted
+
+    response = client.get(f"/sessions/{athlete['id']}/progress")
+    assert response.status_code == 200
+    body = response.json()
+    assert [p["image_id"] for p in body["points"]] == [first, second]
+    point = body["points"][0]
+    assert point["phase"] == "toe_off"
+    assert point["measured"] == 6
+    assert 0 <= point["in_range"] <= 6
+    assert point["score"] == round(100 * point["in_range"] / 6)
+    assert point["swing"]["hip"] == 105.0
+    assert body["ranges"]["toe_off"]["swing"]["hip"] == [97, 113]
+
+    headers = auth_headers("other@example.com")
+    assert client.get(
+        f"/sessions/{athlete['id']}/progress", headers=headers
+    ).status_code == 404

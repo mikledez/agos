@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from db import repository as repo
 
 from .deps import get_current_user_id
-from .schemas import SessionCreate, SessionOut, SessionUpdate
+from .schemas import ProgressOut, SessionCreate, SessionOut, SessionUpdate
 from .serializers import image_payload
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -18,7 +18,9 @@ def create_session(
         repo.get_session(payload.parent_id, user_id) is None
     ):
         raise HTTPException(status_code=404, detail="Parent session not found")
-    return repo.create_session(user_id, payload.name, parent_id=payload.parent_id)
+    return repo.create_session(
+        user_id, payload.name, parent_id=payload.parent_id, kind=payload.kind
+    )
 
 @router.get("", response_model=list[SessionOut])
 def list_sessions(
@@ -66,6 +68,17 @@ def list_session_images(
         user_id, session_id=session_id, limit=limit, offset=offset
     )
     return [image_payload(row) for row in rows]
+
+@router.get("/{session_id}/progress", response_model=ProgressOut)
+def get_progress(
+    session_id: int, user_id: int = Depends(get_current_user_id)
+) -> dict:
+    """Form over time for every image in the folder and its subfolders."""
+    from services import progress
+
+    if repo.get_session(session_id, user_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return progress.athlete_progress(session_id, user_id)
 
 @router.patch("/{session_id}", response_model=SessionOut)
 def update_session(
