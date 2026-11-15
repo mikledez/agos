@@ -61,19 +61,6 @@ export function Dashboard({
         eyebrow="Dashboard"
         title={`Welcome back, ${firstName}`}
         description="Pick up where you left off or add a fresh sprint frame to your library."
-        actions={
-          <>
-            <Button asChild variant="outline">
-              <Link href="/library">Open library</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/library?upload=1">
-                <Plus className="size-4" />
-                Analyze a run
-              </Link>
-            </Button>
-          </>
-        }
       />
 
       <dl className="grid gap-4 sm:grid-cols-3">

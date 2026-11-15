@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   FolderPlus,
-  ImagePlus,
   Library,
   Plus,
   UploadCloud,
@@ -153,22 +152,6 @@ export function LibraryView({
             ? "Nothing here yet."
             : `${folders.length} folder${folders.length === 1 ? "" : "s"} · ${images.length} image${images.length === 1 ? "" : "s"}`
         }
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setNewFolderOpen(true)}
-            >
-              <FolderPlus className="size-4" />
-              New folder
-            </Button>
-            <Button type="button" onClick={() => setUploadOpen(true)}>
-              <UploadCloud className="size-4" />
-              Upload
-            </Button>
-          </>
-        }
       />
 
       {isEmpty ? (
@@ -177,26 +160,10 @@ export function LibraryView({
           title={folder ? "This folder is empty" : "Your library is empty"}
           description={
             folder
-              ? "Add a sprint frame or create a subfolder to keep this training set organized."
-              : "Upload a sprint photo to get pose measurements, AI feedback, and a chat for each frame."
+              ? "Use the + button to add a sprint frame or a subfolder."
+              : "Use the + button to upload a sprint photo or create a folder."
           }
           className="mt-8 py-16"
-          action={
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" onClick={() => setUploadOpen(true)}>
-                <ImagePlus className="size-4" />
-                Upload an image
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setNewFolderOpen(true)}
-              >
-                <FolderPlus className="size-4" />
-                New folder
-              </Button>
-            </div>
-          }
         />
       ) : (
         <div className="mt-8 space-y-8">
