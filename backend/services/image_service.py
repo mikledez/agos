@@ -21,6 +21,30 @@ logger = logging.getLogger(__name__)
 MAX_UPLOAD_BYTES = int(os.getenv("AGOS_MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
 IMAGE_RETENTION_HOURS = int(os.getenv("AGOS_IMAGE_RETENTION_HOURS", 48))
 ANNOTATED_JPEG_QUALITY = 85
+# Cards are square crops shown at most ~300 CSS px wide; 480 covers 1.5x screens.
+THUMBNAIL_SHORT_SIDE = 480
+THUMBNAIL_JPEG_QUALITY = 75
+
+def make_thumbnail(image: np.ndarray) -> bytes:
+    """Shrink so the shorter side is THUMBNAIL_SHORT_SIDE (never enlarges)."""
+
+    height, width = image.shape[:2]
+    scale = THUMBNAIL_SHORT_SIDE / min(height, width)
+    if scale < 1:
+        size = (max(1, round(width * scale)), max(1, round(height * scale)))
+        image = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+    ok, encoded = cv2.imencode(
+        ".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, THUMBNAIL_JPEG_QUALITY]
+    )
+    if not ok:
+        raise ValueError("Could not encode thumbnail")
+    return encoded.tobytes()
+
+def thumbnail_from_bytes(contents: bytes) -> bytes:
+    image = cv2.imdecode(np.frombuffer(contents, np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise ValueError("Invalid image file")
+    return make_thumbnail(image)
 
 def _assert_finite(result: dict[str, Any]) -> None:
     message = "Low confidence pose: cannot compute angles"
@@ -76,6 +100,7 @@ def analyze_and_store(
     if not ok:
         raise ValueError("Could not encode annotated image")
     annotated_bytes = encoded.tobytes()
+    thumbnail_bytes = make_thumbnail(annotated)
 
     stored_filename, annotated_path = storage.new_image_names(
         user_id, original_filename
@@ -92,7 +117,11 @@ def analyze_and_store(
     )
     try:
         repo.save_image_files(
-            row["id"], user_id, original=contents, annotated=annotated_bytes
+            row["id"],
+            user_id,
+            original=contents,
+            annotated=annotated_bytes,
+            thumbnail=thumbnail_bytes,
         )
     except Exception:
         repo.delete_image(row["id"], user_id)

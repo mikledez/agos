@@ -26,6 +26,7 @@ export type SprintImage = {
   created_at: string;
   updated_at: string;
   original_url: string;
+  thumbnail_url: string;
   annotated_url: string | null;
 };
 

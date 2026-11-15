@@ -141,9 +141,7 @@ export function Dashboard({
                 href={`/library${
                   image.session_id ? `?folder=${image.session_id}&` : "?"
                 }image=${image.id}`}
-                src={backendAssetUrl(
-                  image.annotated_url ?? image.original_url,
-                )}
+                src={backendAssetUrl(image.thumbnail_url)}
               />
             ))}
           </div>
