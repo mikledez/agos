@@ -1,5 +1,5 @@
 # Optional: local humanization model (see backend/services/humanization.py).
 # The model weights download on first use (default SmolLM2-1.7B-Instruct).
-transformers>=4.46,<6
+transformers>=5.22.2,<6
 torch>=2.4
 accelerate>=1.15.0
