@@ -71,6 +71,7 @@ class ImageOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     original_url: str
+    thumbnail_url: str
     annotated_url: str | None = None
 
 class ImageDetail(BaseModel):

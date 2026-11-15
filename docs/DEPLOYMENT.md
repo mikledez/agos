@@ -46,7 +46,9 @@ calls Render server-side.
    The free 512 MB instance can be tight for both ONNX models; if analysis is
    OOM-killed, use the Starter plan.
 5. Build downloads the ONNX models via `scripts/download_models.py` (skips
-   files that already exist). Models stay outside git.
+   files that already exist). Models stay outside git. It then runs
+   `scripts/init_db.py`, so schema changes reach Neon on every deploy before
+   the new code goes live (the free plan has no pre-deploy command).
 6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.
 
 AI feedback and per-image chat use Groq by default in the Render blueprint:
