@@ -95,3 +95,15 @@ export type ChatExchange = {
   user_message: ChatMessage;
   assistant_message: ChatMessage;
 };
+
+export type LibrarySearchParams = {
+  q: string;
+  phase: string | null;
+  direction: string | null;
+};
+
+/** `location` is the path of the containing folder, or null at the library root. */
+export type SearchResults = {
+  folders: (Folder & { location: string | null })[];
+  images: (SprintImage & { location: string | null })[];
+};

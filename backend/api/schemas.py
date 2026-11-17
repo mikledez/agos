@@ -149,3 +149,18 @@ class ProgressPoint(BaseModel):
 class ProgressOut(BaseModel):
     points: list[ProgressPoint]
     ranges: dict[str, Any]
+
+Phase = Literal["toe_off", "mid_stance", "touchdown"]
+Direction = Literal["ltr", "rtl"]
+
+class SearchFolderOut(SessionOut):
+    # Path of the folder that contains this one; None at the library root.
+    location: str | None = None
+
+class SearchImageOut(ImageOut):
+    # Path of the folder the image is in; None at the library root.
+    location: str | None = None
+
+class SearchOut(BaseModel):
+    folders: list[SearchFolderOut]
+    images: list[SearchImageOut]
