@@ -8,6 +8,7 @@ from db import repository as repo
 
 from .analysis import RANGES, assess
 
+
 def _score(phase: str, row: dict[str, Any]) -> tuple[int, int]:
     """(joints in range, joints measured); unclear joints don't count."""
 
