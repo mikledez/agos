@@ -14,8 +14,9 @@ os.environ["AGOS_DATABASE_URL"] = TEST_DSN
 os.environ["AGOS_ALLOW_DEV_USER"] = "1"
 os.environ["AGOS_INTERNAL_SECRET"] = "test-internal-secret-0123456789abcdef"
 
-from db.connection import get_pool
-from db.init import init_db
+from db.connection import get_pool  # noqa: E402 (env must be set first)
+from db.init import init_db  # noqa: E402
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _database():

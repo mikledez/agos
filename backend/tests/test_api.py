@@ -1,19 +1,19 @@
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import cv2
 import jwt
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from test_feedback import _landmarks as synthetic_landmarks
+from test_feedback import _pose_info as synthetic_pose_info
 
 import main
 from db import repository as repo
 from db.connection import get_pool
 from services import humanization, image_service, storage
-from test_feedback import _landmarks as synthetic_landmarks
-from test_feedback import _pose_info as synthetic_pose_info
 
 
 def auth_headers(email: str) -> dict[str, str]:
@@ -22,7 +22,7 @@ def auth_headers(email: str) -> dict[str, str]:
             "sub": email,
             "email": email,
             "name": "Test User",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
         os.environ["AGOS_INTERNAL_SECRET"],
         algorithm="HS256",
@@ -86,7 +86,9 @@ def _upload(client, session_id=None, filename="run.png"):
     )
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok", "database": "ok"}
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["database"] == "ok"
 
 def test_analyze_persists_and_serves_files(client, fake_analysis):
     response = _upload(client)
@@ -221,13 +223,14 @@ def test_lost_image_cleanup_only_removes_old_records_without_bytes(
 ):
     client.get("/me")
     user_id = repo.get_user_by_email("dev@local")["id"]
-    make_record = lambda name: repo.create_image(
-        user_id,
-        original_filename=name,
-        stored_filename=f"users/1/images/{name}",
-        phase="toe_off",
-        direction="ltr",
-    )["id"]
+    def make_record(name):
+        return repo.create_image(
+            user_id,
+            original_filename=name,
+            stored_filename=f"users/1/images/{name}",
+            phase="toe_off",
+            direction="ltr",
+        )["id"]
     lost = make_record("lost.jpg")
     still_saving = make_record("saving.jpg")
     stored = _upload(client).json()["image_id"]

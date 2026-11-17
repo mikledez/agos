@@ -1,0 +1,9 @@
+target-version = "py312"
+line-length = 100
+extend-exclude = ["models", "uploads"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# B008: FastAPI's Depends()/File() in defaults is the intended pattern.
+# E501: long lines are left to the formatter's judgement.
+ignore = ["B008", "E501"]

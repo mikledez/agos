@@ -47,10 +47,12 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check --output-format github .
       - name: Compile check
         run: python -m compileall -q api db services scripts tests main.py
-      - name: Run tests
-        run: python -m pytest tests -q
+      - name: Run tests with coverage
+        run: python -m pytest tests -q --cov --cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY
 
   frontend:
     name: Frontend typecheck, lint, build

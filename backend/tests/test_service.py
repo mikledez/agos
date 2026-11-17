@@ -7,6 +7,7 @@ import pytest
 
 from services import humanization, image_service
 
+
 def test_rejects_unknown_phase_before_touching_models():
     with pytest.raises(ValueError, match="unknown phase"):
         image_service.analyze_and_store(

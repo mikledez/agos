@@ -7,14 +7,12 @@ exports expect.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 import cv2
 import numpy as np
 
 
 def bbox_xyxy2cs(bbox: np.ndarray,
-                 padding: float = 1.25) -> Tuple[np.ndarray, np.ndarray]:
+                 padding: float = 1.25) -> tuple[np.ndarray, np.ndarray]:
     """Convert an xyxy bounding box into (center, scale).
 
     ``scale`` is the box size (w, h) multiplied by the padding factor.
@@ -38,7 +36,7 @@ def _get_3rd_point(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def get_warp_matrix(center: np.ndarray, scale: np.ndarray, rot: float,
-                    output_size: Tuple[int, int],
+                    output_size: tuple[int, int],
                     inv: bool = False) -> np.ndarray:
     """Affine matrix that warps the bbox area in the input onto the model
     input size (or back, with ``inv=True``)."""
@@ -69,8 +67,8 @@ def get_warp_matrix(center: np.ndarray, scale: np.ndarray, rot: float,
     return warp_mat
 
 
-def get_top_down_affine(input_size: Tuple[int, int], bbox: np.ndarray,
-                        image: np.ndarray) -> Tuple[np.ndarray, np.ndarray,
+def get_top_down_affine(input_size: tuple[int, int], bbox: np.ndarray,
+                        image: np.ndarray) -> tuple[np.ndarray, np.ndarray,
                                                     np.ndarray]:
     """Crop the bbox area of ``image`` into the fixed model input size.
 
@@ -94,7 +92,7 @@ def get_top_down_affine(input_size: Tuple[int, int], bbox: np.ndarray,
 
 
 def keypoints_to_image(keypoints: np.ndarray,
-                       model_input_size: Tuple[int, int],
+                       model_input_size: tuple[int, int],
                        center: np.ndarray,
                        scale: np.ndarray) -> np.ndarray:
     """Map model-space keypoint coordinates back to the input image."""
