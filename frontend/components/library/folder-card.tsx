@@ -23,6 +23,8 @@ import type { Folder as FolderType } from "@/lib/types";
 type FolderCardProps = {
   folder: FolderType;
   href: string;
+  /** Parent folder path shown in search results; null means the library root. */
+  location?: string | null;
   onRename?: (folder: FolderType) => void;
   onToggleKind?: (folder: FolderType) => void;
   onDelete?: (folder: FolderType) => void;
@@ -31,6 +33,7 @@ type FolderCardProps = {
 export function FolderCard({
   folder,
   href,
+  location,
   onRename,
   onToggleKind,
   onDelete,
@@ -53,8 +56,9 @@ export function FolderCard({
             {folder.name}
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-            {isAthlete ? "Athlete · " : "Updated "}
-            {formatDate(folder.updated_at)}
+            {location !== undefined
+              ? `${isAthlete ? "Athlete · " : ""}in ${location ?? "Library"}`
+              : `${isAthlete ? "Athlete · " : "Updated "}${formatDate(folder.updated_at)}`}
           </span>
         </span>
       </Link>

@@ -670,3 +670,57 @@ def test_progress_covers_subfolders_oldest_first(client, fake_analysis):
     assert client.get(
         f"/sessions/{athlete['id']}/progress", headers=headers
     ).status_code == 404
+
+
+def test_search_finds_folders_and_images_anywhere_with_their_path(client, fake_analysis):
+    team = client.post("/sessions", json={"name": "Sprint Team"}).json()
+    sam = client.post(
+        "/sessions", json={"name": "Sam", "parent_id": team["id"], "kind": "athlete"}
+    ).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1 sprints", "parent_id": sam["id"]}
+    ).json()
+    deep = _upload(client, session_id=week["id"], filename="sprint_block.png").json()
+    root = _upload(client, filename="SPRINT_root.png").json()
+    _upload(client, filename="other.png")
+
+    body = client.get("/search", params={"q": "sprint"}).json()
+    folders = {f["name"]: f["location"] for f in body["folders"]}
+    assert folders == {"Sprint Team": None, "Week 1 sprints": "Sprint Team / Sam"}
+    images = {i["id"]: i["location"] for i in body["images"]}
+    assert images == {
+        deep["image_id"]: "Sprint Team / Sam / Week 1 sprints",
+        root["image_id"]: None,
+    }
+    assert body["images"][0]["thumbnail_url"].endswith("/thumbnail")
+
+
+def test_search_filters_and_treats_wildcards_literally(client, fake_analysis):
+    client.post("/sessions", json={"name": "100% effort"})
+    client.post("/sessions", json={"name": "1000 effort"})
+    _upload(client, filename="a_b.png")
+    _upload(client, filename="axb.png")
+
+    assert [f["name"] for f in client.get("/search", params={"q": "100%"}).json()["folders"]] == ["100% effort"]
+    assert [i["original_filename"] for i in client.get("/search", params={"q": "a_b"}).json()["images"]] == ["a_b.png"]
+
+    # Phase/direction filters return images only, even with no text.
+    body = client.get("/search", params={"phase": "toe_off"}).json()
+    assert body["folders"] == []
+    assert len(body["images"]) == 2
+    assert client.get("/search", params={"direction": "rtl"}).json()["images"] == []
+    assert client.get("/search", params={"q": "effort", "phase": "toe_off"}).json() == {
+        "folders": [], "images": []
+    }
+
+    assert client.get("/search").json() == {"folders": [], "images": []}
+    assert client.get("/search", params={"phase": "sprinting"}).status_code == 422
+
+
+def test_search_only_returns_the_users_own_library(client, fake_analysis):
+    client.post("/sessions", json={"name": "Private squad"})
+    _upload(client, filename="private.png")
+    other = client.get(
+        "/search", params={"q": "private"}, headers=auth_headers("other@example.com")
+    ).json()
+    assert other == {"folders": [], "images": []}

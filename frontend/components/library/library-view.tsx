@@ -7,6 +7,7 @@ import {
   FolderPlus,
   Library,
   Plus,
+  SearchX,
   UploadCloud,
   UserRoundPlus,
 } from "lucide-react";
@@ -37,6 +38,8 @@ import { UploadDialog } from "@/components/library/upload-dialog";
 import { backendAssetUrl } from "@/lib/backend";
 import { toast } from "sonner";
 import { AthleteProgressPanel } from "@/components/library/athlete-progress";
+import { LibrarySearch } from "@/components/library/library-search";
+import { searchQueryString } from "@/lib/search";
 import { setFolderKind } from "@/lib/actions/library";
 import type {
   AthleteProgress,
@@ -44,6 +47,8 @@ import type {
   Folder,
   FolderKind,
   ImageDetail,
+  LibrarySearchParams,
+  SearchResults,
   SprintImage,
 } from "@/lib/types";
 
@@ -63,6 +68,9 @@ type LibraryViewProps = {
   imageDetail: ImageDetail | null;
   messages: ChatMessage[];
   progress: AthleteProgress | null;
+  search: LibrarySearchParams;
+  /** Set while searching; the folder contents are not shown then. */
+  results: SearchResults | null;
   autoOpenUpload: boolean;
 };
 
@@ -74,6 +82,8 @@ export function LibraryView({
   imageDetail,
   messages,
   progress,
+  search,
+  results,
   autoOpenUpload,
 }: LibraryViewProps) {
   const router = useRouter();
@@ -90,11 +100,12 @@ export function LibraryView({
     window.history.replaceState({}, "", url.toString());
   }, [autoOpenUpload]);
 
-  const basePath = folder ? `/library?folder=${folder.id}` : "/library";
+  const folderPath = folder ? `/library?folder=${folder.id}` : "/library";
+  const basePath = results
+    ? `/library?${searchQueryString(search)}`
+    : folderPath;
   const imageHref = (image: SprintImage) =>
-    folder
-      ? `${basePath}&image=${image.id}`
-      : `/library?image=${image.id}`;
+    `${basePath}${basePath.includes("?") ? "&" : "?"}image=${image.id}`;
 
   function closeImage() {
     router.push(basePath, { scroll: false });
@@ -132,12 +143,59 @@ export function LibraryView({
   }
 
   const isEmpty = folders.length === 0 && images.length === 0;
+  const resultCount = results
+    ? results.folders.length + results.images.length
+    : 0;
+
+  const folderCard = (item: Folder, location?: string | null) => (
+    <FolderCard
+      key={item.id}
+      folder={item}
+      href={`/library?folder=${item.id}`}
+      location={location}
+      onRename={(target) =>
+        setRenameTarget({ kind: "folder", id: target.id, name: target.name })
+      }
+      onToggleKind={toggleKind}
+      onDelete={(target) =>
+        setDeleteTarget({ kind: "folder", id: target.id, name: target.name })
+      }
+    />
+  );
+
+  const imageCard = (image: SprintImage, location?: string | null) => (
+    <ImageCard
+      key={image.id}
+      image={image}
+      href={imageHref(image)}
+      src={backendAssetUrl(image.thumbnail_url)}
+      location={location}
+      onRename={(target) =>
+        setRenameTarget({
+          kind: "image",
+          id: target.id,
+          name: target.original_filename,
+        })
+      }
+      onDelete={(target) =>
+        setDeleteTarget({
+          kind: "image",
+          id: target.id,
+          name: target.original_filename,
+        })
+      }
+    />
+  );
+
+  const folderGrid = "grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5";
+  const imageGrid =
+    "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
 
   return (
     <div className="mx-auto max-w-screen-2xl px-4 pb-32 pt-8 sm:px-6 lg:px-8 lg:pt-10">
       <PageHeader
         eyebrow={
-          folder ? (
+          folder && !results ? (
             <div className="normal-case tracking-normal">
                 <Breadcrumb>
                   <BreadcrumbList>
@@ -175,19 +233,59 @@ export function LibraryView({
             </div>
           ) : undefined
         }
-        title={folder?.name ?? "Library"}
+        title={results ? "Library" : (folder?.name ?? "Library")}
         description={
-          isEmpty
-            ? "Nothing here yet."
-            : `${folders.length} folder${folders.length === 1 ? "" : "s"} · ${images.length} image${images.length === 1 ? "" : "s"}`
+          results
+            ? resultCount === 0
+              ? "No matches."
+              : `${resultCount} result${resultCount === 1 ? "" : "s"} across your library`
+            : isEmpty
+              ? "Nothing here yet."
+              : `${folders.length} folder${folders.length === 1 ? "" : "s"} · ${images.length} image${images.length === 1 ? "" : "s"}`
         }
       />
 
-      {folder?.kind === "athlete" && progress ? (
+      <div className="mt-6">
+        <LibrarySearch search={search} clearHref={folderPath} />
+      </div>
+
+      {results ? (
+        resultCount === 0 ? (
+          <EmptyState
+            icon={SearchX}
+            title="No matches"
+            description="Try a different name, or turn off a filter."
+            className="mt-8 py-16"
+          />
+        ) : (
+          <div className="mt-8 space-y-8">
+            {results.folders.length > 0 ? (
+              <section>
+                <h2 className="label-caps mb-3 text-muted-foreground">
+                  Folders
+                </h2>
+                <div className={folderGrid}>
+                  {results.folders.map((item) => folderCard(item, item.location))}
+                </div>
+              </section>
+            ) : null}
+            {results.images.length > 0 ? (
+              <section>
+                <h2 className="label-caps mb-3 text-muted-foreground">
+                  Images
+                </h2>
+                <div className={imageGrid}>
+                  {results.images.map((image) => imageCard(image, image.location))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        )
+      ) : folder?.kind === "athlete" && progress ? (
         <AthleteProgressPanel progress={progress} className="mt-8" />
       ) : null}
 
-      {isEmpty ? (
+      {results ? null : isEmpty ? (
         <EmptyState
           icon={folder ? Library : FolderPlus}
           title={folder ? "This folder is empty" : "Your library is empty"}
@@ -203,29 +301,8 @@ export function LibraryView({
           {folders.length > 0 ? (
             <section>
               <h2 className="label-caps mb-3 text-muted-foreground">Folders</h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
-                {folders.map((item) => (
-                  <FolderCard
-                    key={item.id}
-                    folder={item}
-                    href={`/library?folder=${item.id}`}
-                    onRename={(target) =>
-                      setRenameTarget({
-                        kind: "folder",
-                        id: target.id,
-                        name: target.name,
-                      })
-                    }
-                    onToggleKind={toggleKind}
-                    onDelete={(target) =>
-                      setDeleteTarget({
-                        kind: "folder",
-                        id: target.id,
-                        name: target.name,
-                      })
-                    }
-                  />
-                ))}
+              <div className={folderGrid}>
+                {folders.map((item) => folderCard(item))}
               </div>
             </section>
           ) : null}
@@ -233,29 +310,8 @@ export function LibraryView({
           {images.length > 0 ? (
             <section>
               <h2 className="label-caps mb-3 text-muted-foreground">Images</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-                {images.map((image) => (
-                  <ImageCard
-                    key={image.id}
-                    image={image}
-                    href={imageHref(image)}
-                    src={backendAssetUrl(image.thumbnail_url)}
-                    onRename={(target) =>
-                      setRenameTarget({
-                        kind: "image",
-                        id: target.id,
-                        name: target.original_filename,
-                      })
-                    }
-                    onDelete={(target) =>
-                      setDeleteTarget({
-                        kind: "image",
-                        id: target.id,
-                        name: target.original_filename,
-                      })
-                    }
-                  />
-                ))}
+              <div className={imageGrid}>
+                {images.map((image) => imageCard(image))}
               </div>
             </section>
           ) : null}
@@ -338,7 +394,7 @@ export function LibraryView({
           key={imageDetail.image.id}
           detail={imageDetail}
           messages={messages}
-          backLabel={folder?.name ?? "Library"}
+          backLabel={results ? "Search results" : (folder?.name ?? "Library")}
           onClose={closeImage}
           onRename={(image) =>
             setRenameTarget({

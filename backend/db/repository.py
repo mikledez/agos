@@ -485,6 +485,92 @@ def list_images(
         cur.execute(query, params)
         return cur.fetchall()
 
+_FOLDER_PATHS = """
+    WITH RECURSIVE folder_paths AS (
+        SELECT id, name::text AS path
+        FROM sessions
+        WHERE user_id = %(user_id)s AND parent_id IS NULL
+        UNION ALL
+        SELECT s.id, fp.path || ' / ' || s.name
+        FROM sessions AS s
+        JOIN folder_paths AS fp ON s.parent_id = fp.id
+        WHERE s.user_id = %(user_id)s
+    )
+"""
+
+def _like_pattern(text: str) -> str:
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+def search_library(
+    user_id: int,
+    *,
+    query: str = "",
+    phase: str | None = None,
+    direction: str | None = None,
+    limit: int = 100,
+) -> dict[str, list[Row]]:
+    """Find folders and images by name anywhere in the user's library.
+
+    Folders only match on name, so they are left out when a phase or
+    direction filter is set. Each result carries the path of the folder it
+    lives in (``None`` at the library root).
+    """
+    if phase is not None:
+        _validate_phase(phase)
+    if direction is not None:
+        _validate_direction(direction)
+    text = query.strip()
+    if not text and phase is None and direction is None:
+        return {"folders": [], "images": []}
+
+    params: dict[str, Any] = {"user_id": user_id, "limit": limit}
+    folders: list[Row] = []
+    with _cursor() as cur:
+        if text and phase is None and direction is None:
+            params["pattern"] = _like_pattern(text)
+            cur.execute(
+                _FOLDER_PATHS
+                + """
+                SELECT s.*, parent.path AS location
+                FROM sessions AS s
+                LEFT JOIN folder_paths AS parent ON parent.id = s.parent_id
+                WHERE s.user_id = %(user_id)s AND s.name ILIKE %(pattern)s
+                ORDER BY lower(s.name), s.id
+                LIMIT %(limit)s
+                """,
+                params,
+            )
+            folders = cur.fetchall()
+
+        conditions = ["i.user_id = %(user_id)s"]
+        if text:
+            params["pattern"] = _like_pattern(text)
+            conditions.append("i.original_filename ILIKE %(pattern)s")
+        if phase is not None:
+            params["phase"] = phase
+            conditions.append("i.phase = %(phase)s")
+        if direction is not None:
+            params["direction"] = direction
+            conditions.append("i.direction = %(direction)s")
+        image_columns = _IMAGE_COLUMNS.replace(
+            "FROM images AS i",
+            ", folder.path AS location\n    FROM images AS i",
+        )
+        cur.execute(
+            _FOLDER_PATHS
+            + f"""
+            SELECT {image_columns}
+            LEFT JOIN folder_paths AS folder ON folder.id = i.session_id
+            WHERE {" AND ".join(conditions)}
+            ORDER BY i.created_at DESC, i.id DESC
+            LIMIT %(limit)s
+            """,
+            params,
+        )
+        images = cur.fetchall()
+    return {"folders": folders, "images": images}
+
 def update_image(image_id: int, user_id: int, **changes: Any) -> Row | None:
     if "phase" in changes:
         _validate_phase(changes["phase"])
