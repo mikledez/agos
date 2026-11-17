@@ -11,6 +11,7 @@ from .connection import get_pool
 
 PHASES = ("toe_off", "mid_stance", "touchdown")
 DIRECTIONS = ("ltr", "rtl")
+SESSION_KINDS = ("folder", "athlete")
 
 Row = dict[str, Any]
 _UNSET = object()
@@ -201,20 +202,25 @@ def _has_ancestor(cur, node_id: int, ancestor_id: int, user_id: int) -> bool:
     )
     return cur.fetchone() is not None
 
+def _validate_kind(kind: str) -> None:
+    if kind not in SESSION_KINDS:
+        raise ValidationError(f"kind must be one of {', '.join(SESSION_KINDS)}")
+
 def create_session(
-    user_id: int, name: str, parent_id: int | None = None
+    user_id: int, name: str, parent_id: int | None = None, kind: str = "folder"
 ) -> Row:
     name = _clean_name(name)
+    _validate_kind(kind)
     with _cursor() as cur:
         if parent_id is not None:
             _ensure_session(cur, parent_id, user_id)
         cur.execute(
             """
-            INSERT INTO sessions (user_id, parent_id, name)
-            VALUES (%s, %s, %s)
+            INSERT INTO sessions (user_id, parent_id, name, kind)
+            VALUES (%s, %s, %s, %s)
             RETURNING *
             """,
-            (user_id, parent_id, name),
+            (user_id, parent_id, name, kind),
         )
         return cur.fetchone()
 
@@ -251,10 +257,14 @@ def update_session(
     *,
     name: str | object = _UNSET,
     parent_id: int | None | object = _UNSET,
+    kind: str | object = _UNSET,
 ) -> Row | None:
     changes: dict[str, Any] = {}
     if name is not _UNSET:
         changes["name"] = _clean_name(name)
+    if kind is not _UNSET:
+        _validate_kind(kind)
+        changes["kind"] = kind
 
     with _cursor() as cur:
         cur.execute(_session_row + " FOR UPDATE", (session_id, user_id))
@@ -281,7 +291,7 @@ def update_session(
             "id",
             session_id,
             changes,
-            frozenset({"name", "parent_id"}),
+            frozenset({"name", "parent_id", "kind"}),
             user_id=user_id,
         )
 
@@ -424,10 +434,18 @@ def create_image_from_analysis(
         stance_feedback=stance.get("feedback"),
     )
 
+# The full photo is gone once an athlete image is cleared; the null check
+# reads only the null bitmap, so it doesn't load the image bytes.
+_IMAGE_COLUMNS = """
+    i.*, COALESCE(f.original IS NOT NULL, false) AS has_photo
+    FROM images AS i
+    LEFT JOIN image_files AS f ON f.image_id = i.id
+"""
+
 def get_image(image_id: int, user_id: int) -> Row | None:
     with _cursor() as cur:
         cur.execute(
-            "SELECT * FROM images WHERE id = %s AND user_id = %s",
+            f"SELECT {_IMAGE_COLUMNS} WHERE i.id = %s AND i.user_id = %s",
             (image_id, user_id),
         )
         return cur.fetchone()
@@ -454,14 +472,14 @@ def list_images(
 ) -> list[Row]:
 
     limit, offset = _limit_offset(limit, offset)
-    query = "SELECT * FROM images WHERE user_id = %s"
+    query = f"SELECT {_IMAGE_COLUMNS} WHERE i.user_id = %s"
     params: list[Any] = [user_id]
     if session_id is None:
-        query += " AND session_id IS NULL"
+        query += " AND i.session_id IS NULL"
     elif session_id is not _UNSET:
-        query += " AND session_id = %s"
+        query += " AND i.session_id = %s"
         params.append(session_id)
-    query += " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
+    query += " ORDER BY i.created_at DESC, i.id DESC LIMIT %s OFFSET %s"
     params.extend((limit, offset))
     with _cursor() as cur:
         cur.execute(query, params)
@@ -601,20 +619,79 @@ def delete_images_without_files() -> int:
         cur.execute(f"DELETE FROM images AS i WHERE {_NO_STORED_FILES}")
         return cur.rowcount
 
+_ATHLETE_TREES = """
+    WITH RECURSIVE athlete_tree AS (
+        SELECT id FROM sessions WHERE kind = 'athlete'
+        UNION
+        SELECT s.id FROM sessions AS s JOIN athlete_tree AS t ON s.parent_id = t.id
+    )
+"""
+
 def delete_inactive_images(retention_hours: int) -> int:
-    """Delete images idle past the limit; older rows without stored bytes stay."""
+    """Delete images idle past the limit, except inside athlete folders.
+
+    Older rows without stored bytes stay (see delete_images_without_files).
+    """
 
     with _cursor() as cur:
         cur.execute(
-            """
+            _ATHLETE_TREES
+            + """
             DELETE FROM images AS i
             USING image_files AS f
             WHERE f.image_id = i.id
               AND f.last_activity_at < now() - make_interval(hours => %s)
+              AND (i.session_id IS NULL
+                   OR i.session_id NOT IN (SELECT id FROM athlete_tree))
             """,
             (retention_hours,),
         )
         return cur.rowcount
+
+def clear_inactive_athlete_photos(retention_hours: int) -> int:
+    """Drop full photos of idle athlete images; keep measurements and thumbnail.
+
+    Images without a thumbnail keep their photo so the card still has a picture.
+    """
+
+    with _cursor() as cur:
+        cur.execute(
+            _ATHLETE_TREES
+            + """
+            UPDATE image_files AS f
+            SET original = NULL, annotated = NULL
+            FROM images AS i
+            WHERE f.image_id = i.id
+              AND f.original IS NOT NULL
+              AND f.thumbnail IS NOT NULL
+              AND f.last_activity_at < now() - make_interval(hours => %s)
+              AND i.session_id IN (SELECT id FROM athlete_tree)
+            """,
+            (retention_hours,),
+        )
+        return cur.rowcount
+
+def list_subtree_images(session_id: int, user_id: int) -> list[Row]:
+    """Images in a folder and all its subfolders, oldest first."""
+
+    with _cursor() as cur:
+        cur.execute(
+            """
+            WITH RECURSIVE tree AS (
+                SELECT id FROM sessions WHERE id = %s AND user_id = %s
+                UNION
+                SELECT s.id FROM sessions AS s JOIN tree AS t ON s.parent_id = t.id
+            )
+            SELECT id, original_filename, phase, created_at,
+                   swing_hip, swing_knee, swing_ankle,
+                   stance_hip, stance_knee, stance_ankle, thigh_thigh
+            FROM images
+            WHERE user_id = %s AND session_id IN (SELECT id FROM tree)
+            ORDER BY created_at, id
+            """,
+            (session_id, user_id, user_id),
+        )
+        return cur.fetchall()
 
 def list_chat_messages(
     image_id: int, user_id: int, limit: int = 50

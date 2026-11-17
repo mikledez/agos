@@ -140,7 +140,12 @@ def delete_user(user_id: int) -> bool:
     return repo.delete_user(user_id)
 
 def purge_inactive_images() -> int:
+    """Returns the number of deleted images; athlete images only lose their photo."""
+
     deleted = repo.delete_inactive_images(IMAGE_RETENTION_HOURS)
     if deleted:
         logger.info("deleted %d inactive images", deleted)
+    cleared = repo.clear_inactive_athlete_photos(IMAGE_RETENTION_HOURS)
+    if cleared:
+        logger.info("cleared photos of %d inactive athlete images", cleared)
     return deleted

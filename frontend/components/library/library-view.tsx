@@ -8,6 +8,7 @@ import {
   Library,
   Plus,
   UploadCloud,
+  UserRoundPlus,
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
@@ -34,9 +35,14 @@ import { NewFolderDialog } from "@/components/library/new-folder-dialog";
 import { RenameDialog } from "@/components/library/rename-dialog";
 import { UploadDialog } from "@/components/library/upload-dialog";
 import { backendAssetUrl } from "@/lib/backend";
+import { toast } from "sonner";
+import { AthleteProgressPanel } from "@/components/library/athlete-progress";
+import { setFolderKind } from "@/lib/actions/library";
 import type {
+  AthleteProgress,
   ChatMessage,
   Folder,
+  FolderKind,
   ImageDetail,
   SprintImage,
 } from "@/lib/types";
@@ -56,6 +62,7 @@ type LibraryViewProps = {
   images: SprintImage[];
   imageDetail: ImageDetail | null;
   messages: ChatMessage[];
+  progress: AthleteProgress | null;
   autoOpenUpload: boolean;
 };
 
@@ -66,10 +73,12 @@ export function LibraryView({
   images,
   imageDetail,
   messages,
+  progress,
   autoOpenUpload,
 }: LibraryViewProps) {
   const router = useRouter();
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderKind, setNewFolderKind] = useState<FolderKind>("folder");
   const [uploadOpen, setUploadOpen] = useState(autoOpenUpload);
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -100,6 +109,26 @@ export function LibraryView({
         folder.parent_id ? `/library?folder=${folder.parent_id}` : "/library",
       );
     }
+  }
+
+  function openNewFolder(kind: FolderKind) {
+    setNewFolderKind(kind);
+    setNewFolderOpen(true);
+  }
+
+  async function toggleKind(target: Folder) {
+    const kind: FolderKind = target.kind === "athlete" ? "folder" : "athlete";
+    const result = await setFolderKind(target.id, kind);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(
+      kind === "athlete"
+        ? `${target.name} now tracks progress`
+        : `${target.name} is a regular folder again`,
+    );
+    router.refresh();
   }
 
   const isEmpty = folders.length === 0 && images.length === 0;
@@ -154,6 +183,10 @@ export function LibraryView({
         }
       />
 
+      {folder?.kind === "athlete" && progress ? (
+        <AthleteProgressPanel progress={progress} className="mt-8" />
+      ) : null}
+
       {isEmpty ? (
         <EmptyState
           icon={folder ? Library : FolderPlus}
@@ -183,6 +216,7 @@ export function LibraryView({
                         name: target.name,
                       })
                     }
+                    onToggleKind={toggleKind}
                     onDelete={(target) =>
                       setDeleteTarget({
                         kind: "folder",
@@ -241,9 +275,13 @@ export function LibraryView({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className="w-48">
-            <DropdownMenuItem onSelect={() => setNewFolderOpen(true)}>
+            <DropdownMenuItem onSelect={() => openNewFolder("folder")}>
               <FolderPlus className="size-4" />
               New folder
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => openNewFolder("athlete")}>
+              <UserRoundPlus className="size-4" />
+              New athlete
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setUploadOpen(true)}>
               <UploadCloud className="size-4" />
@@ -259,6 +297,7 @@ export function LibraryView({
         onOpenChange={setNewFolderOpen}
         parentId={folder?.id ?? null}
         parentName={folder?.name}
+        kind={newFolderKind}
       />
 
       <UploadDialog

@@ -176,25 +176,36 @@ export function ImageSheet({
 
         <div className="space-y-6 p-5">
           <section className="space-y-3">
-            <Tabs
-              value={view}
-              onValueChange={(value) => setView(value as "annotated" | "original")}
-            >
-              <TabsList className="grid w-full grid-cols-2 sm:w-auto">
-                <TabsTrigger value="annotated" disabled={!image.annotated_url}>
-                  Annotated
-                </TabsTrigger>
-                <TabsTrigger value="original">Original</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {image.has_photo ? (
+              <Tabs
+                value={view}
+                onValueChange={(value) => setView(value as "annotated" | "original")}
+              >
+                <TabsList className="grid w-full grid-cols-2 sm:w-auto">
+                  <TabsTrigger value="annotated" disabled={!image.annotated_url}>
+                    Annotated
+                  </TabsTrigger>
+                  <TabsTrigger value="original">Original</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            ) : null}
             <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
               <img
-                src={src}
+                src={
+                  image.has_photo
+                    ? src
+                    : backendAssetUrl(image.thumbnail_url) ?? ""
+                }
                 alt={image.original_filename}
                 className="max-h-[440px] w-full object-contain"
               />
             </div>
-            {view === "annotated" && image.annotated_url ? (
+            {!image.has_photo ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                The full photo was removed after 48 hours without activity. The
+                measurements and feedback are kept for progress tracking.
+              </p>
+            ) : view === "annotated" && image.annotated_url ? (
               <p className="text-xs leading-5 text-muted-foreground">
                 Green zones show where each body part should be. Red lines and
                 numbered markers show what to fix.

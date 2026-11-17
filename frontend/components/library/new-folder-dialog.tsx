@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderPlus, Loader2 } from "lucide-react";
+import { FolderPlus, Loader2, UserRoundPlus } from "lucide-react";
 import { toast } from "sonner";
 import { createFolder } from "@/lib/actions/library";
 import { Button } from "@/components/ui/button";
@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { FolderKind } from "@/lib/types";
 
 type NewFolderDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   parentId: number | null;
   parentName?: string;
+  kind?: FolderKind;
 };
 
 export function NewFolderDialog({
@@ -29,7 +31,10 @@ export function NewFolderDialog({
   onOpenChange,
   parentId,
   parentName,
+  kind = "folder",
 }: NewFolderDialogProps) {
+  const isAthlete = kind === "athlete";
+  const noun = isAthlete ? "athlete" : "folder";
   const router = useRouter();
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
@@ -41,20 +46,20 @@ export function NewFolderDialog({
 
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Enter a folder name");
+      setError(`Enter ${isAthlete ? "the athlete's" : "a folder"} name`);
       return;
     }
 
     setPending(true);
     setError(null);
-    const result = await createFolder(trimmed, parentId);
+    const result = await createFolder(trimmed, parentId, kind);
     if (result.error) {
       setError(result.error);
       setPending(false);
       return;
     }
 
-    toast.success("Folder created");
+    toast.success(isAthlete ? "Athlete added" : "Folder created");
     setPending(false);
     onOpenChange(false);
     router.refresh();
@@ -66,23 +71,31 @@ export function NewFolderDialog({
         <form onSubmit={handleSubmit} className="space-y-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="size-5 text-primary" />
-              New folder
+              {isAthlete ? (
+                <UserRoundPlus className="size-5 text-primary" />
+              ) : (
+                <FolderPlus className="size-5 text-primary" />
+              )}
+              New {noun}
             </DialogTitle>
             <DialogDescription>
-              {parentName
-                ? `Create a subfolder inside “${parentName}”.`
-                : "Create a folder at the top level of your library."}
+              {isAthlete
+                ? "An athlete is a folder that tracks progress across every photo in it, including subfolders. Its measurements are kept after the 48-hour photo cleanup."
+                : parentName
+                  ? `Create a subfolder inside “${parentName}”.`
+                  : "Create a folder at the top level of your library."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-1.5">
-            <Label htmlFor="folder-name">Folder name</Label>
+            <Label htmlFor="folder-name">
+              {isAthlete ? "Athlete name" : "Folder name"}
+            </Label>
             <Input
               id="folder-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Block starts"
+              placeholder={isAthlete ? "e.g. Sam Lee" : "e.g. Block starts"}
               maxLength={120}
               autoFocus
               disabled={pending}
@@ -106,7 +119,7 @@ export function NewFolderDialog({
             </Button>
             <Button type="submit" disabled={pending || !name.trim()}>
               {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-              Create folder
+              {isAthlete ? "Add athlete" : "Create folder"}
             </Button>
           </DialogFooter>
         </form>

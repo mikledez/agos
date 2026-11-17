@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { LibraryView } from "@/components/library/library-view";
 import { backendFetch } from "@/lib/backend";
 import type {
+  AthleteProgress,
   ChatMessage,
   Folder,
   ImageDetail,
@@ -73,7 +74,7 @@ export default async function LibraryPage({
     : null;
   if (folderId && !folder) redirect("/library");
 
-  const [breadcrumb, folders, images, imageDetail, messages] = await Promise.all([
+  const [breadcrumb, folders, images, imageDetail, messages, progress] = await Promise.all([
     folder ? buildTrail(folder) : Promise.resolve([]),
     fetchJson<Folder[]>(
       folder ? `/sessions?parent_id=${folder.id}` : "/sessions?root=true",
@@ -91,6 +92,11 @@ export default async function LibraryPage({
           optional: true,
         })
       : Promise.resolve([]),
+    folder?.kind === "athlete"
+      ? fetchJson<AthleteProgress | null>(`/sessions/${folder.id}/progress`, null, {
+          optional: true,
+        })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -101,6 +107,7 @@ export default async function LibraryPage({
       images={images}
       imageDetail={imageDetail}
       messages={messages}
+      progress={progress}
       autoOpenUpload={params.upload === "1"}
     />
   );

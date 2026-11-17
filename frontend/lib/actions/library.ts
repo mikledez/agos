@@ -5,6 +5,7 @@ import { backendFetch } from "@/lib/backend";
 import type {
   ChatExchange,
   Folder,
+  FolderKind,
   Humanization,
   SprintImage,
 } from "@/lib/types";
@@ -34,14 +35,15 @@ function revalidateAll() {
 export async function createFolder(
   name: string,
   parentId: number | null,
+  kind: FolderKind = "folder",
 ): Promise<ActionResult & { folder?: Folder }> {
   const trimmed = name.trim();
-  if (!trimmed) return { error: "Folder name is required" };
+  if (!trimmed) return { error: "Name is required" };
 
   const response = await backendFetch("/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: trimmed, parent_id: parentId }),
+    body: JSON.stringify({ name: trimmed, parent_id: parentId, kind }),
   });
   if (!response.ok) {
     return { error: await errorMessage(response, "Could not create folder") };
@@ -64,6 +66,22 @@ export async function renameFolder(
   });
   if (!response.ok) {
     return { error: await errorMessage(response, "Could not rename folder") };
+  }
+  revalidateAll();
+  return { folder: (await response.json()) as Folder };
+}
+
+export async function setFolderKind(
+  folderId: number,
+  kind: FolderKind,
+): Promise<ActionResult & { folder?: Folder }> {
+  const response = await backendFetch(`/sessions/${folderId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
+  if (!response.ok) {
+    return { error: await errorMessage(response, "Could not update folder") };
   }
   revalidateAll();
   return { folder: (await response.json()) as Folder };

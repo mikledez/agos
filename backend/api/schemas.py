@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -17,19 +18,24 @@ class UserUpdate(BaseModel):
     name: str | None = None
     image: str | None = None
 
+SessionKind = Literal["folder", "athlete"]
+
 class SessionCreate(BaseModel):
     name: str = Field(min_length=1)
     parent_id: int | None = None
+    kind: SessionKind = "folder"
 
 class SessionUpdate(BaseModel):
     name: str | None = None
     parent_id: int | None = None
+    kind: SessionKind | None = None
 
 class SessionOut(BaseModel):
     id: int
     user_id: int
     parent_id: int | None = None
     name: str
+    kind: SessionKind = "folder"
     created_at: datetime
     updated_at: datetime
 
@@ -73,6 +79,8 @@ class ImageOut(BaseModel):
     original_url: str
     thumbnail_url: str
     annotated_url: str | None = None
+    # False once an athlete image's full photo was cleared after 48 idle hours.
+    has_photo: bool = True
 
 class ImageDetail(BaseModel):
     image: ImageOut
@@ -119,3 +127,25 @@ class HumanizationOut(BaseModel):
     updated_at: datetime
 
 ImageDetail.model_rebuild()
+
+
+class ProgressAngles(BaseModel):
+    hip: float | None = None
+    knee: float | None = None
+    ankle: float | None = None
+
+class ProgressPoint(BaseModel):
+    image_id: int
+    original_filename: str
+    phase: str
+    created_at: datetime
+    score: int | None = None
+    in_range: int
+    measured: int
+    swing: ProgressAngles
+    stance: ProgressAngles
+    thigh_thigh: float | None = None
+
+class ProgressOut(BaseModel):
+    points: list[ProgressPoint]
+    ranges: dict[str, Any]
