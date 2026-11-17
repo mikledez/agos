@@ -1,0 +1,37 @@
+name: Deploy check
+
+# After CI passes on main, Render deploys the commit. This waits until the
+# API's /health reports that commit, so a failed deploy shows up as a red run.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    name: API is live on the new commit
+    if: github.event.workflow_run.conclusion == 'success' && vars.AGOS_API_PUBLIC_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_URL: ${{ vars.AGOS_API_PUBLIC_URL }}
+      EXPECTED: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Wait for the deploy
+        run: |
+          for attempt in $(seq 1 60); do
+            body=$(curl -fsS --max-time 60 "$API_URL/health" || true)
+            commit=$(echo "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            echo "attempt $attempt: ${body:-no response}"
+            if [ "$commit" = "$EXPECTED" ]; then
+              echo "Live on $EXPECTED"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::$API_URL did not report commit $EXPECTED within 15 minutes"
+          exit 1

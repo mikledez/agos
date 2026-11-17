@@ -33,7 +33,7 @@ def _pose_info(landmarks):
 
 
 def _leg(landmarks, slots):
-    return dict(zip(LEG_NAMES, (landmarks[slot] for slot in slots)))
+    return dict(zip(LEG_NAMES, (landmarks[slot] for slot in slots), strict=True))
 
 
 def _point(vector):

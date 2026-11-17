@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -84,7 +85,7 @@ class ImageOut(BaseModel):
 
 class ImageDetail(BaseModel):
     image: ImageOut
-    humanization: "HumanizationOut | None" = None
+    humanization: HumanizationOut | None = None
 
 class ImageUpdate(BaseModel):
     session_id: int | None = None

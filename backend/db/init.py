@@ -7,6 +7,7 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from .connection import DATABASE_URL
 from .schema import SCHEMA_PATH
 
+
 def ensure_database(dsn: str | None = None) -> bool:
 
     dsn = dsn or DATABASE_URL

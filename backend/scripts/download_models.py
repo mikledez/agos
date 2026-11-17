@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import sys
-import zipfile
 import tempfile
+import zipfile
 from pathlib import Path
+
 try:
     import urllib.request
 except ImportError:

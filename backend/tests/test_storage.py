@@ -2,6 +2,7 @@ import pytest
 
 from services import storage
 
+
 def test_new_image_names_are_unique_and_keep_the_extension():
     original, annotated = storage.new_image_names(1, "Runner.PNG")
     assert original.startswith("users/1/images/")

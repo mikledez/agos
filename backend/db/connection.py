@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
-from psycopg_pool import ConnectionPool
+
 from dotenv import load_dotenv
+from psycopg_pool import ConnectionPool
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")

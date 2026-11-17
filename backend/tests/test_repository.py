@@ -4,6 +4,7 @@ import pytest
 
 from db import repository as repo
 
+
 def make_user(email="a@example.com", name="Alice"):
     return repo.create_user(email, name=name)
 
