@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import health, images, sessions, users
+from api import health, images, search, sessions, users
 from db import repository as repo
 from db.connection import close_pool
 from services import image_service
@@ -78,3 +78,4 @@ app.include_router(health.router)
 app.include_router(users.router)
 app.include_router(sessions.router)
 app.include_router(images.router)
+app.include_router(search.router)

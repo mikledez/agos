@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, HTTPException
 
 from db.connection import get_pool
@@ -15,7 +17,13 @@ def health() -> dict:
         raise HTTPException(
             status_code=503, detail="database unavailable"
         ) from exc
-    return {"status": "ok", "database": "ok"}
+    # Render sets RENDER_GIT_COMMIT; the post-deploy check uses it to confirm
+    # the new commit is live.
+    return {
+        "status": "ok",
+        "database": "ok",
+        "commit": os.environ.get("RENDER_GIT_COMMIT"),
+    }
 
 @router.get("/")
 def root() -> dict:

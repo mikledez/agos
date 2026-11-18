@@ -21,6 +21,8 @@ type ImageCardProps = {
   image: SprintImage;
   href: string;
   src: string | null;
+  /** Folder path shown in search results; null means the library root. */
+  location?: string | null;
   onRename?: (image: SprintImage) => void;
   onDelete?: (image: SprintImage) => void;
 };
@@ -29,6 +31,7 @@ export function ImageCard({
   image,
   href,
   src,
+  location,
   onRename,
   onDelete,
 }: ImageCardProps) {
@@ -66,6 +69,11 @@ export function ImageCard({
           <p className="truncate text-sm font-semibold group-hover:text-primary">
             {image.original_filename}
           </p>
+          {location !== undefined ? (
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              in {location ?? "Library"}
+            </p>
+          ) : null}
           <p className="mt-0.5 text-xs text-muted-foreground">
             {formatDate(image.created_at)}
           </p>

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     parent_id INT,
     name TEXT NOT NULL CHECK (name <> ''),
+    kind TEXT NOT NULL DEFAULT 'folder' CHECK (kind IN ('folder', 'athlete')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (parent_id IS NULL OR parent_id != id),
@@ -21,6 +22,10 @@ CREATE TABLE IF NOT EXISTS sessions (
         FOREIGN KEY (parent_id, user_id)
         REFERENCES sessions(id, user_id) ON DELETE CASCADE
 );
+
+-- Athlete folders track progress over time (added after launch).
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'folder'
+    CHECK (kind IN ('folder', 'athlete'));
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user_parent ON sessions(user_id, parent_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_id);
@@ -57,7 +62,8 @@ CREATE INDEX IF NOT EXISTS idx_images_phase ON images(phase);
 CREATE TABLE IF NOT EXISTS image_files (
     image_id INT PRIMARY KEY,
     user_id INT NOT NULL,
-    original BYTEA NOT NULL,
+    -- NULL once an athlete image's full photo is cleared; measurements stay.
+    original BYTEA,
     annotated BYTEA,
     thumbnail BYTEA,
     last_activity_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -67,6 +73,7 @@ CREATE TABLE IF NOT EXISTS image_files (
 );
 
 ALTER TABLE image_files ADD COLUMN IF NOT EXISTS thumbnail BYTEA;
+ALTER TABLE image_files ALTER COLUMN original DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_image_files_last_activity
     ON image_files(last_activity_at);

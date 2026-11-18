@@ -1,6 +1,7 @@
 # ĀGOS
 
 [![CI](https://github.com/mikledez/agos/actions/workflows/ci.yml/badge.svg)](https://github.com/mikledez/agos/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/mikledez/agos/actions/workflows/codeql.yml/badge.svg)](https://github.com/mikledez/agos/actions/workflows/codeql.yml)
 
 Sprint form analysis from a single photo. Upload a side-on photo, pick the
 phase (toe off, mid stance or touchdown) and the running direction. ĀGOS finds
@@ -36,7 +37,12 @@ Browser ──► Next.js (Vercel) ──► FastAPI (Render) ──► Postgres
 - **AI feedback:** only the analysis results are sent to Groq, never the
   image itself.
 - **Storage:** images and their small thumbnails are stored in Postgres. An
-  image is deleted after 48 hours without activity.
+  image is deleted after 48 hours without activity. Inside an athlete folder
+  only the full-size photo is removed; the measurements and thumbnail stay so
+  progress can be tracked over time.
+- **Athletes:** an athlete is a folder that shows a form score over time
+  (share of measured joints in range) and each joint's angle against its
+  target band, per phase, across all its subfolders.
 
 ## Tech stack
 
@@ -46,7 +52,7 @@ Browser ──► Next.js (Vercel) ──► FastAPI (Render) ──► Postgres
 | Backend  | FastAPI, ONNX Runtime, OpenCV, NumPy, psycopg 3, raw SQL |
 | Database | PostgreSQL (Neon in production) |
 | AI text  | Groq `openai/gpt-oss-20b`, with an optional local Hugging Face model |
-| CI/CD    | GitHub Actions; Render deploys only after CI passes; Vercel |
+| CI/CD    | GitHub Actions (tests, lint, CodeQL), protected `main`, Render deploys after CI passes, Vercel |
 
 ## Run locally
 
@@ -79,7 +85,7 @@ For local development without Google credentials, set `AUTH_DEV_LOGIN=1`.
 ## Tests
 
 ```bash
-cd backend && python -m pytest tests -q     # needs Postgres; uses TEST_DATABASE_URL
+cd backend && ruff check . && python -m pytest tests -q --cov   # needs Postgres; uses TEST_DATABASE_URL
 cd frontend && npx tsc --noEmit && npm run lint && npm run build
 ```
 
@@ -89,8 +95,12 @@ re-measures each drawn target zone and checks that it matches the reference
 range in both directions. The pose models are stubbed, so the tests need no
 model weights.
 
-CI runs both sets of checks on every push and pull request to `main` and
-`staging`. Render only deploys a commit after CI passes.
+CI runs both sets of checks on every push and pull request, and writes a
+coverage table to the run summary. `main` only accepts pull requests whose
+checks pass; Render then deploys the commit, and a deploy check waits until
+`/health` reports that commit. CodeQL scans the Python, TypeScript and
+workflow code weekly and on every pull request. Dependabot opens weekly
+update PRs, and patch updates merge on their own once CI passes.
 
 ## Deployment
 

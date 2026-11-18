@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 import { LibraryView } from "@/components/library/library-view";
 import { backendFetch } from "@/lib/backend";
+import { isSearching, parseLibrarySearch, searchQueryString } from "@/lib/search";
 import type {
+  AthleteProgress,
   ChatMessage,
   Folder,
   ImageDetail,
+  SearchResults,
   SprintImage,
 } from "@/lib/types";
 
@@ -62,27 +65,37 @@ export default async function LibraryPage({
     folder?: string;
     image?: string;
     upload?: string;
+    q?: string;
+    phase?: string;
+    direction?: string;
   }>;
 }) {
   const params = await searchParams;
   const folderId = parseId(params.folder);
   const imageId = parseId(params.image);
+  const search = parseLibrarySearch(params);
+  const searching = isSearching(search);
 
-  const folder = folderId
+  // Search covers the whole library, so it ignores the folder.
+  const folder = folderId && !searching
     ? await fetchJson<Folder | null>(`/sessions/${folderId}`, null)
     : null;
-  if (folderId && !folder) redirect("/library");
+  if (folderId && !searching && !folder) redirect("/library");
 
-  const [breadcrumb, folders, images, imageDetail, messages] = await Promise.all([
+  const [breadcrumb, folders, images, imageDetail, messages, progress, results] = await Promise.all([
     folder ? buildTrail(folder) : Promise.resolve([]),
-    fetchJson<Folder[]>(
-      folder ? `/sessions?parent_id=${folder.id}` : "/sessions?root=true",
-      [],
-    ),
-    fetchJson<SprintImage[]>(
-      folder ? `/images?session_id=${folder.id}` : "/images?root=true",
-      [],
-    ),
+    searching
+      ? Promise.resolve([])
+      : fetchJson<Folder[]>(
+          folder ? `/sessions?parent_id=${folder.id}` : "/sessions?root=true",
+          [],
+        ),
+    searching
+      ? Promise.resolve([])
+      : fetchJson<SprintImage[]>(
+          folder ? `/images?session_id=${folder.id}` : "/images?root=true",
+          [],
+        ),
     imageId
       ? fetchJson<ImageDetail | null>(`/images/${imageId}`, null)
       : Promise.resolve(null),
@@ -91,6 +104,17 @@ export default async function LibraryPage({
           optional: true,
         })
       : Promise.resolve([]),
+    folder?.kind === "athlete"
+      ? fetchJson<AthleteProgress | null>(`/sessions/${folder.id}/progress`, null, {
+          optional: true,
+        })
+      : Promise.resolve(null),
+    searching
+      ? fetchJson<SearchResults>(`/search?${searchQueryString(search)}`, {
+          folders: [],
+          images: [],
+        })
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -101,6 +125,9 @@ export default async function LibraryPage({
       images={images}
       imageDetail={imageDetail}
       messages={messages}
+      progress={progress}
+      search={search}
+      results={results}
       autoOpenUpload={params.upload === "1"}
     />
   );

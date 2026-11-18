@@ -1,5 +1,6 @@
-import numpy as np
 from types import SimpleNamespace
+
+import numpy as np
 
 SWING_POINTS = (24, 26, 28, 30, 32)
 STANCE_POINTS = (23, 25, 27, 29, 31)

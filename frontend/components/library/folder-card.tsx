@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Folder, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import {
+  Folder,
+  FolderInput,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,17 +23,24 @@ import type { Folder as FolderType } from "@/lib/types";
 type FolderCardProps = {
   folder: FolderType;
   href: string;
+  /** Parent folder path shown in search results; null means the library root. */
+  location?: string | null;
   onRename?: (folder: FolderType) => void;
+  onToggleKind?: (folder: FolderType) => void;
   onDelete?: (folder: FolderType) => void;
 };
 
 export function FolderCard({
   folder,
   href,
+  location,
   onRename,
+  onToggleKind,
   onDelete,
 }: FolderCardProps) {
-  const hasMenu = Boolean(onRename || onDelete);
+  const hasMenu = Boolean(onRename || onToggleKind || onDelete);
+  const isAthlete = folder.kind === "athlete";
+  const Icon = isAthlete ? UserRound : Folder;
 
   return (
     <div className="group relative rounded-lg border border-border bg-card transition-colors hover:border-primary/30">
@@ -35,14 +49,16 @@ export function FolderCard({
         className="flex items-center gap-3 rounded-lg p-4 pr-12 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent text-primary">
-          <Folder className="size-5" aria-hidden="true" />
+          <Icon className="size-5" aria-hidden="true" />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-sm font-semibold group-hover:text-primary">
             {folder.name}
           </span>
           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-            Updated {formatDate(folder.updated_at)}
+            {location !== undefined
+              ? `${isAthlete ? "Athlete · " : ""}in ${location ?? "Library"}`
+              : `${isAthlete ? "Athlete · " : "Updated "}${formatDate(folder.updated_at)}`}
           </span>
         </span>
       </Link>
@@ -60,11 +76,21 @@ export function FolderCard({
                 <MoreVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuContent align="end" className="w-48">
               {onRename ? (
                 <DropdownMenuItem onSelect={() => onRename(folder)}>
                   <Pencil className="size-4" />
                   Rename
+                </DropdownMenuItem>
+              ) : null}
+              {onToggleKind ? (
+                <DropdownMenuItem onSelect={() => onToggleKind(folder)}>
+                  {isAthlete ? (
+                    <FolderInput className="size-4" />
+                  ) : (
+                    <UserRound className="size-4" />
+                  )}
+                  {isAthlete ? "Make a regular folder" : "Make an athlete"}
                 </DropdownMenuItem>
               ) : null}
               {onDelete ? (

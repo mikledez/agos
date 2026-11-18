@@ -136,7 +136,7 @@ def draw_feedback(image, pose_info, landmarks, result, phase, direction):
             cv2.line(out, _pt(keypoints[i]), _pt(keypoints[j]), NEUTRAL, thin, cv2.LINE_AA)
 
     legs = {
-        role: dict(zip(_LEG_POINTS, (landmarks[slot] for slot in result["slots"][role])))
+        role: dict(zip(_LEG_POINTS, (landmarks[slot] for slot in result["slots"][role]), strict=True))
         for role in ("swing", "stance")
     }
     checks = result["checks"]

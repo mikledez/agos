@@ -49,7 +49,12 @@ calls Render server-side.
    files that already exist). Models stay outside git. It then runs
    `scripts/init_db.py`, so schema changes reach Neon on every deploy before
    the new code goes live (the free plan has no pre-deploy command).
-6. Health check: `GET https://<service>.onrender.com/health` → `{"status":"ok","database":"ok"}`.
+6. Health check: `GET https://<service>.onrender.com/health` →
+   `{"status":"ok","database":"ok","commit":"<deployed git sha>"}`.
+7. In GitHub → Settings → Secrets and variables → Actions → **Variables**, add
+   `AGOS_API_PUBLIC_URL=https://<service>.onrender.com`. The *Deploy check*
+   workflow uses it to confirm each `main` commit actually went live. Without
+   it, the check is skipped.
 
 AI feedback and per-image chat use Groq by default in the Render blueprint:
 

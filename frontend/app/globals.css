@@ -52,6 +52,8 @@
   --border: #e9dede;
   --input: #e4d9d9;
   --ring: #bc1545;
+  /* Target-range band on progress charts (shown at low opacity). */
+  --chart-target: #1f8a4c;
 }
 
 @layer base {

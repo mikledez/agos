@@ -1,19 +1,19 @@
 import os
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import cv2
 import jwt
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from test_feedback import _landmarks as synthetic_landmarks
+from test_feedback import _pose_info as synthetic_pose_info
 
 import main
 from db import repository as repo
 from db.connection import get_pool
 from services import humanization, image_service, storage
-from test_feedback import _landmarks as synthetic_landmarks
-from test_feedback import _pose_info as synthetic_pose_info
 
 
 def auth_headers(email: str) -> dict[str, str]:
@@ -22,7 +22,7 @@ def auth_headers(email: str) -> dict[str, str]:
             "sub": email,
             "email": email,
             "name": "Test User",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
         },
         os.environ["AGOS_INTERNAL_SECRET"],
         algorithm="HS256",
@@ -69,7 +69,11 @@ def fake_analysis(monkeypatch):
             annotated_path=annotated,
         )
         repo.save_image_files(
-            row["id"], user_id, original=contents, annotated=b"annotated"
+            row["id"],
+            user_id,
+            original=contents,
+            annotated=b"annotated",
+            thumbnail=b"thumbnail",
         )
         return row, FAKE_RESULT, "QUJD"
 
@@ -86,7 +90,9 @@ def _upload(client, session_id=None, filename="run.png"):
     )
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok", "database": "ok"}
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["database"] == "ok"
 
 def test_analyze_persists_and_serves_files(client, fake_analysis):
     response = _upload(client)
@@ -221,13 +227,14 @@ def test_lost_image_cleanup_only_removes_old_records_without_bytes(
 ):
     client.get("/me")
     user_id = repo.get_user_by_email("dev@local")["id"]
-    make_record = lambda name: repo.create_image(
-        user_id,
-        original_filename=name,
-        stored_filename=f"users/1/images/{name}",
-        phase="toe_off",
-        direction="ltr",
-    )["id"]
+    def make_record(name):
+        return repo.create_image(
+            user_id,
+            original_filename=name,
+            stored_filename=f"users/1/images/{name}",
+            phase="toe_off",
+            direction="ltr",
+        )["id"]
     lost = make_record("lost.jpg")
     still_saving = make_record("saving.jpg")
     stored = _upload(client).json()["image_id"]
@@ -589,3 +596,134 @@ def test_upload_size_limit(client, monkeypatch):
         data={"phase": "toe_off", "direction": "ltr"},
     )
     assert response.status_code == 413
+
+
+def test_athlete_folders_can_be_created_and_toggled(client):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"})
+    assert athlete.status_code == 201
+    assert athlete.json()["kind"] == "athlete"
+    plain = client.post("/sessions", json={"name": "Drills"}).json()
+    assert plain["kind"] == "folder"
+
+    url = f"/sessions/{plain['id']}"
+    assert client.patch(url, json={"kind": "athlete"}).json()["kind"] == "athlete"
+    assert client.patch(url, json={"kind": "folder"}).json()["kind"] == "folder"
+    assert client.patch(url, json={"kind": "coach"}).status_code == 422
+    assert client.post("/sessions", json={"name": "X", "kind": "team"}).status_code == 422
+
+def test_purge_keeps_athlete_measurements_but_drops_the_photo(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1", "parent_id": athlete["id"]}
+    ).json()
+    plain = client.post("/sessions", json={"name": "Misc"}).json()
+    kept = _upload(client, session_id=week["id"]).json()
+    dropped = _upload(client, session_id=plain["id"]).json()["image_id"]
+    _age_image(kept["image_id"], hours=49)
+    _age_image(dropped, hours=49)
+
+    assert image_service.purge_inactive_images() == 1
+
+    assert not _image_exists(dropped)
+    image = client.get(f"/images/{kept['image_id']}").json()["image"]
+    assert image["has_photo"] is False
+    assert image["annotated_url"] is None
+    assert image["swing_hip"] == 105.0
+    assert client.get(kept["original_url"]).status_code == 404
+    assert client.get(image["thumbnail_url"]).content == b"thumbnail"
+    listed = client.get(f"/images?session_id={week['id']}").json()
+    assert listed[0]["has_photo"] is False
+
+    # Already cleared images are left alone on the next run.
+    assert repo.clear_inactive_athlete_photos(48) == 0
+
+def test_recent_athlete_images_keep_their_photo(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    body = _upload(client, session_id=athlete["id"]).json()
+    _age_image(body["image_id"], hours=47)
+
+    image_service.purge_inactive_images()
+
+    image = client.get(f"/images/{body['image_id']}").json()["image"]
+    assert image["has_photo"] is True
+    assert client.get(body["original_url"]).status_code == 200
+
+def test_progress_covers_subfolders_oldest_first(client, fake_analysis):
+    athlete = client.post("/sessions", json={"name": "Sam", "kind": "athlete"}).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1", "parent_id": athlete["id"]}
+    ).json()
+    first = _upload(client, session_id=athlete["id"]).json()["image_id"]
+    second = _upload(client, session_id=week["id"]).json()["image_id"]
+    _upload(client)  # outside the athlete, not counted
+
+    response = client.get(f"/sessions/{athlete['id']}/progress")
+    assert response.status_code == 200
+    body = response.json()
+    assert [p["image_id"] for p in body["points"]] == [first, second]
+    point = body["points"][0]
+    assert point["phase"] == "toe_off"
+    assert point["measured"] == 6
+    assert 0 <= point["in_range"] <= 6
+    assert point["score"] == round(100 * point["in_range"] / 6)
+    assert point["swing"]["hip"] == 105.0
+    assert body["ranges"]["toe_off"]["swing"]["hip"] == [97, 113]
+
+    headers = auth_headers("other@example.com")
+    assert client.get(
+        f"/sessions/{athlete['id']}/progress", headers=headers
+    ).status_code == 404
+
+
+def test_search_finds_folders_and_images_anywhere_with_their_path(client, fake_analysis):
+    team = client.post("/sessions", json={"name": "Sprint Team"}).json()
+    sam = client.post(
+        "/sessions", json={"name": "Sam", "parent_id": team["id"], "kind": "athlete"}
+    ).json()
+    week = client.post(
+        "/sessions", json={"name": "Week 1 sprints", "parent_id": sam["id"]}
+    ).json()
+    deep = _upload(client, session_id=week["id"], filename="sprint_block.png").json()
+    root = _upload(client, filename="SPRINT_root.png").json()
+    _upload(client, filename="other.png")
+
+    body = client.get("/search", params={"q": "sprint"}).json()
+    folders = {f["name"]: f["location"] for f in body["folders"]}
+    assert folders == {"Sprint Team": None, "Week 1 sprints": "Sprint Team / Sam"}
+    images = {i["id"]: i["location"] for i in body["images"]}
+    assert images == {
+        deep["image_id"]: "Sprint Team / Sam / Week 1 sprints",
+        root["image_id"]: None,
+    }
+    assert body["images"][0]["thumbnail_url"].endswith("/thumbnail")
+
+
+def test_search_filters_and_treats_wildcards_literally(client, fake_analysis):
+    client.post("/sessions", json={"name": "100% effort"})
+    client.post("/sessions", json={"name": "1000 effort"})
+    _upload(client, filename="a_b.png")
+    _upload(client, filename="axb.png")
+
+    assert [f["name"] for f in client.get("/search", params={"q": "100%"}).json()["folders"]] == ["100% effort"]
+    assert [i["original_filename"] for i in client.get("/search", params={"q": "a_b"}).json()["images"]] == ["a_b.png"]
+
+    # Phase/direction filters return images only, even with no text.
+    body = client.get("/search", params={"phase": "toe_off"}).json()
+    assert body["folders"] == []
+    assert len(body["images"]) == 2
+    assert client.get("/search", params={"direction": "rtl"}).json()["images"] == []
+    assert client.get("/search", params={"q": "effort", "phase": "toe_off"}).json() == {
+        "folders": [], "images": []
+    }
+
+    assert client.get("/search").json() == {"folders": [], "images": []}
+    assert client.get("/search", params={"phase": "sprinting"}).status_code == 422
+
+
+def test_search_only_returns_the_users_own_library(client, fake_analysis):
+    client.post("/sessions", json={"name": "Private squad"})
+    _upload(client, filename="private.png")
+    other = client.get(
+        "/search", params={"q": "private"}, headers=auth_headers("other@example.com")
+    ).json()
+    assert other == {"folders": [], "images": []}

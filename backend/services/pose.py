@@ -20,7 +20,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import cv2
-import numpy as np
 
 from .detector import PersonDetector
 from .rtmpose import RTMPose
